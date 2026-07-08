@@ -1,0 +1,2010 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snake Royale</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0e1220; --panel: rgba(232,235,245,0.03); --card: rgba(232,235,245,0.045);
+    --line: rgba(232,235,245,0.09); --text: #e8ebf5; --dim: #9aa3bd;
+    --accent: #5ec8b0; --warn: #e8836e;
+  }
+  html, body {
+    height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; cursor: pointer; }
+  #wrap { display: flex; height: 100%; }
+  #stage { flex: 1; position: relative; min-width: 0; min-height: 0; }
+  #game { display: block; width: 100%; height: 100%; }
+
+  /* ---- dashboard sidebar ---- */
+  #side {
+    width: 300px; flex-shrink: 0; height: 100%; overflow-y: auto;
+    background: linear-gradient(180deg, rgba(232,235,245,0.045), rgba(232,235,245,0.02));
+    border-left: 1px solid var(--line);
+    padding: 22px 20px; display: flex; flex-direction: column; gap: 20px;
+    scrollbar-width: thin; scrollbar-color: rgba(232,235,245,0.18) transparent;
+  }
+  #side::-webkit-scrollbar { width: 8px; }
+  #side::-webkit-scrollbar-thumb { background: rgba(232,235,245,0.14); border-radius: 8px; }
+  #side::-webkit-scrollbar-track { background: transparent; }
+  #side h1 {
+    font-size: 21px; font-weight: 700; letter-spacing: 0.01em;
+    display: flex; align-items: center; gap: 9px;
+  }
+  #side h1::before { content: "🐍"; font-size: 19px; }
+  #side h2 {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--dim);
+    display: flex; align-items: center; gap: 8px;
+  }
+  #side h2::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px; padding: 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+  }
+
+  /* stacked layout for narrow windows: arena on top, dashboard cards in a grid below */
+  @media (max-width: 940px) {
+    #wrap { flex-direction: column; }
+    #stage { height: 56vh; flex: none; }
+    #side {
+      width: 100%; height: auto; flex: 1;
+      border-left: none; border-top: 1px solid var(--line);
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      align-items: start; gap: 14px; padding: 16px;
+    }
+    #side h1 { grid-column: 1 / -1; }
+    #foot { grid-column: 1 / -1; margin-top: 0; }
+  }
+  #qrCard { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  #qrList { display: flex; flex-direction: column; gap: 18px; width: 100%; }
+  .qrItem { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+  .qrItem img { width: 100%; max-width: 185px; border-radius: 8px; image-rendering: pixelated; }
+  .qlbl {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #9aa3bd;
+  }
+  .qurl { font-size: 12.5px; font-weight: 600; color: #e8ebf5; word-break: break-all; text-align: center; }
+  .qnote { font-size: 11px; color: rgba(154,163,189,0.7); text-align: center; }
+  #noNet { font-size: 13px; color: #e8c56e; line-height: 1.5; text-align: center; }
+  #otherNetsBtn {
+    font-size: 11.5px; font-weight: 600; color: #9aa3bd; background: transparent;
+    border: none; text-decoration: underline; text-underline-offset: 3px; padding: 4px 0;
+  }
+  #otherNetsBtn:hover { color: #e8ebf5; }
+  #dashCard { display: flex; flex-direction: column; gap: 6px; }
+  #dashUrl { font-size: 15px; font-weight: 650; color: #6fb1e8; word-break: break-all; }
+  #dashNote { font-size: 11px; color: rgba(154,163,189,0.7); }
+
+  #players { display: flex; flex-direction: column; gap: 8px; }
+  .prow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 10px;
+    background: var(--card); border: 1px solid transparent;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .prow:hover { border-color: var(--line); background: rgba(232,235,245,0.07); }
+  @media (hover: none) { .kickBtn { opacity: 0.6; } }
+  .dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 8px currentColor; }
+  .pname { flex: 1; font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pspecies { font-size: 11.5px; font-weight: 500; color: #9aa3bd; }
+  .score { font-size: 16px; font-weight: 300; min-width: 18px; text-align: right; font-variant-numeric: tabular-nums; }
+  .chip { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; padding: 3px 8px; border-radius: 20px; }
+  .chip.ready   { background: rgba(94,200,176,0.18); color: #5ec8b0; }
+  .chip.waiting { background: rgba(154,163,189,0.15); color: #9aa3bd; }
+  .chip.playing { background: rgba(232,235,245,0.14); color: #e8ebf5; }
+  .chip.out     { background: rgba(232,131,110,0.18); color: #e8836e; }
+  .chip.queued  { background: rgba(232,197,110,0.16); color: #e8c56e; }
+  #noPlayers { font-size: 13px; color: #9aa3bd; text-align: center; padding: 10px 0; }
+  .kickBtn {
+    flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; font-size: 12px;
+    line-height: 1; color: rgba(154,163,189,0.5); background: transparent; border: none;
+    opacity: 0; transition: opacity 0.15s, color 0.15s, background 0.15s;
+  }
+  .prow:hover .kickBtn { opacity: 1; }
+  .kickBtn:hover { color: #e8836e; background: rgba(232,131,110,0.15); }
+
+  #playersHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #kickUnreadyBtn {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; color: #e8836e;
+    background: rgba(232,131,110,0.12); border: 1px solid rgba(232,131,110,0.3);
+    border-radius: 20px; padding: 3px 9px; white-space: nowrap;
+  }
+  #kickUnreadyBtn:hover { background: rgba(232,131,110,0.2); }
+
+  .setSeg { display: flex; gap: 4px; background: rgba(232,235,245,0.06); border-radius: 9px; padding: 3px; }
+  .segBtn {
+    padding: 5px 11px; font-size: 12.5px; font-weight: 600; border-radius: 6px;
+    background: transparent; color: #9aa3bd; border: none;
+    transition: color 0.12s, background 0.12s;
+  }
+  .segBtn:hover { color: #e8ebf5; }
+  .segBtn.active { background: #5ec8b0; color: #0e1220; }
+  #newMatchBtn {
+    padding: 10px; font-size: 13px; font-weight: 600; border-radius: 10px;
+    background: rgba(232,235,245,0.07); color: #e8ebf5; border: 1.5px solid rgba(232,235,245,0.16);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  #newMatchBtn:hover { background: rgba(232,235,245,0.12); border-color: rgba(232,235,245,0.3); }
+  #newMatchBtn:active { transform: scale(0.98); }
+
+  #matchCard { display: flex; flex-direction: column; gap: 6px; }
+  #matchPhase { font-size: 15px; font-weight: 600; }
+  #matchSub { font-size: 12.5px; color: #9aa3bd; }
+  #matchStats { display: flex; gap: 14px; margin-top: 2px; }
+  .stat { display: flex; flex-direction: column; gap: 1px; }
+  .stat b { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9aa3bd; }
+
+  #settingsCard { display: flex; flex-direction: column; gap: 14px; }
+  .setRow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .setLbl { font-size: 13px; font-weight: 600; }
+  #themeSwatches { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .swatch {
+    width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+    border: 2px solid rgba(232,235,245,0.15); box-shadow: 0 0 8px 0 rgba(0,0,0,0.4);
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+  .swatch:hover { transform: scale(1.12); }
+  .swatch.active {
+    border-color: #e8ebf5; transform: scale(1.14);
+    box-shadow: 0 0 0 3px rgba(232,235,245,0.12), 0 0 10px 0 rgba(0,0,0,0.4);
+  }
+  .switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; background: rgba(232,235,245,0.15);
+    border-radius: 22px; cursor: pointer; transition: background 0.15s;
+  }
+  .slider::before {
+    content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px;
+    background: #e8ebf5; border-radius: 50%; transition: transform 0.15s;
+  }
+  .switch input:checked + .slider { background: #5ec8b0; }
+  .switch input:checked + .slider::before { transform: translateX(18px); }
+  #qrSection.hidden #qrCard, #qrSection.hidden #noNet { display: none; }
+  #qrHiddenNote { display: none; font-size: 12px; color: rgba(154,163,189,0.7); text-align: center; padding: 10px 0; }
+  #qrSection.hidden #qrHiddenNote { display: block; }
+
+  #foot { margin-top: auto; font-size: 11.5px; color: rgba(154,163,189,0.6); line-height: 1.6; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage"><canvas id="game"></canvas></div>
+  <aside id="side">
+    <h1>Snake Royale</h1>
+
+    <div>
+      <h2>Match</h2>
+      <div class="card" id="matchCard" style="margin-top:8px">
+        <div id="matchPhase">Lobby</div>
+        <div id="matchSub">+1 point for every snake you outlast · first to 10</div>
+        <div id="matchStats"></div>
+      </div>
+    </div>
+
+    <div>
+      <div id="playersHead">
+        <h2>Players <span id="pcount"></span></h2>
+        <button id="kickUnreadyBtn" style="display:none">Remove not ready</button>
+      </div>
+      <div id="players" style="margin-top:8px"><div id="noPlayers">Waiting for players…</div></div>
+    </div>
+
+    <div>
+      <h2>Settings</h2>
+      <div class="card" id="settingsCard" style="margin-top:8px">
+        <div class="setRow">
+          <div class="setLbl">Arena theme</div>
+          <div id="themeSwatches"></div>
+        </div>
+        <div class="setRow">
+          <div class="setLbl">Show QR codes</div>
+          <label class="switch">
+            <input type="checkbox" id="qrToggle" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="setRow">
+          <div class="setLbl">First to</div>
+          <div class="setSeg" id="winScoreSeg"></div>
+        </div>
+        <button id="newMatchBtn">↺ Reset to lobby (new match)</button>
+      </div>
+    </div>
+
+    <div id="qrSection">
+      <h2>Join on your phone</h2>
+      <div class="card" id="qrCard" style="margin-top:8px">
+        <div id="qrList"></div>
+        <div id="noNet" style="display:none">No local network — connect this computer and the phones to the same Wi-Fi (or a phone hotspot). Updates automatically.</div>
+      </div>
+      <div id="qrHiddenNote">QR codes hidden — flip the switch in Settings to show them.</div>
+    </div>
+
+    <div>
+      <h2>Dashboard on another PC</h2>
+      <div class="card" id="dashCard" style="margin-top:8px">
+        <div id="dashUrl">—</div>
+        <div id="dashNote">Open this on any computer on the same network to mirror this screen.</div>
+      </div>
+    </div>
+
+    <div id="foot">Phones are the controllers — drag to steer, tap BOOST for a speed burst (your trail breaks while boosting, so it's also your escape hatch). Trails and walls are deadly. Grab power-ups: 💎 +1 point · ⚡ turbo refill · 👻 pass through trails · 🛡️ survive one hit · ❄️ freeze everyone else · ✂️ shear all trails · 🌀 teleport. Beware the ☄️ comet that arrives 20s into each round. Mid-match joiners enter at the next round.</div>
+  </aside>
+</div>
+
+<script>
+const stage = document.getElementById("stage");
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const C = {
+  bg: "#0e1220", text: "#e8ebf5", dim: "#9aa3bd",
+  ring: "rgba(232,235,245,0.35)",
+};
+const PLAYER_COLORS = ["#5ec8b0", "#e8836e", "#e8c56e", "#a78bfa", "#6fb1e8", "#d06fb8", "#8de85e", "#e85e8f", "#5ee8d0", "#e8a25e", "#7a8ce8", "#c2e85e"];
+
+// ---------- arena themes ----------
+// each is a distinct *place*, not just a recolor: mood picks the ambient particle system,
+// floorStyle picks the ground rendering, cornerGlyph decorates the cage corners.
+const THEMES = {
+  space: {
+    name: "Deep Space", swatch: "#5ec8b0", mood: "space", floorStyle: "grid", cornerGlyph: null,
+    bg: ["#0a0d1a", "#0e1220", "#090b16"], accent: "94,200,176", danger: "232,131,110",
+    nebula: [["94,200,176", 0.28, 0.3, 0], ["232,131,110", 0.74, 0.72, 2.1], ["111,177,232", 0.6, 0.2, 4.2]],
+  },
+  jungle: {
+    name: "Jungle Ruins", swatch: "#78d850", mood: "jungle", floorStyle: "organic", cornerGlyph: "🍃",
+    bg: ["#081409", "#0d200f", "#050c06"], accent: "120,210,90", danger: "255,170,60",
+    nebula: [["120,210,90", 0.28, 0.3, 0], ["230,200,60", 0.74, 0.72, 2.1], ["70,170,110", 0.6, 0.2, 4.2]],
+    glyphs: ["🍃", "🌿", "🪲"],
+  },
+  arena: {
+    name: "Colosseum", swatch: "#e8a24a", mood: "arena", floorStyle: "tile", cornerGlyph: "🔥",
+    bg: ["#241408", "#2c1a0a", "#150c05"], accent: "230,160,70", danger: "255,90,70",
+    nebula: [["230,160,70", 0.28, 0.3, 0], ["200,90,50", 0.74, 0.72, 2.1], ["255,210,120", 0.6, 0.2, 4.2]],
+    glyphs: ["·", "·", "▫"],
+  },
+  ice: {
+    name: "Arctic Wastes", swatch: "#78c8ff", mood: "ice", floorStyle: "frost", cornerGlyph: "❄️",
+    bg: ["#0a1420", "#0d1a2b", "#071019"], accent: "120,200,255", danger: "255,120,120",
+    nebula: [["120,200,255", 0.28, 0.3, 0], ["220,240,255", 0.74, 0.72, 2.1], ["80,150,220", 0.6, 0.2, 4.2]],
+    glyphs: ["❄", "✦", "❄"],
+  },
+  cyber: {
+    name: "Neon Circuit", swatch: "#ff44c4", mood: "cyber", floorStyle: "cyber", cornerGlyph: "⚡",
+    bg: ["#170a24", "#1b0f2e", "#0d0618"], accent: "255,68,196", danger: "255,214,10",
+    nebula: [["255,68,196", 0.28, 0.3, 0], ["94,60,255", 0.74, 0.72, 2.1], ["48,226,255", 0.6, 0.2, 4.2]],
+  },
+  volcano: {
+    name: "Volcanic Core", swatch: "#ff6e32", mood: "arena", floorStyle: "tile", cornerGlyph: "🌋",
+    bg: ["#1a0805", "#241009", "#0d0402"], accent: "255,110,50", danger: "255,40,40",
+    nebula: [["255,110,50", 0.28, 0.3, 0], ["255,200,60", 0.74, 0.72, 2.1], ["180,30,20", 0.6, 0.2, 4.2]],
+    glyphs: ["🔥", "·", "▪"],
+  },
+  ocean: {
+    name: "Deep Ocean", swatch: "#46c8dc", mood: "ice", floorStyle: "frost", cornerGlyph: "🐚",
+    bg: ["#031824", "#04212f", "#020e16"], accent: "70,200,220", danger: "255,120,90",
+    nebula: [["70,200,220", 0.28, 0.3, 0], ["150,230,255", 0.74, 0.72, 2.1], ["40,140,170", 0.6, 0.2, 4.2]],
+    glyphs: ["🫧", "·", "○"],
+  },
+};
+let theme = THEMES[localStorage.getItem("sr_theme")] || THEMES.space;
+function setTheme(key) {
+  theme = THEMES[key] || THEMES.space;
+  localStorage.setItem("sr_theme", key);
+  document.querySelectorAll(".swatch").forEach(el => el.classList.toggle("active", el.dataset.key === key));
+  makeSky();
+}
+const themeSwatchesEl = document.getElementById("themeSwatches");
+themeSwatchesEl.innerHTML = Object.entries(THEMES).map(([key, th]) =>
+  `<div class="swatch${theme === th ? " active" : ""}" data-key="${key}" style="background:${th.swatch}" title="${th.name}"></div>`
+).join("");
+themeSwatchesEl.addEventListener("click", (e) => {
+  const sw = e.target.closest(".swatch");
+  if (sw) setTheme(sw.dataset.key);
+});
+
+// ---------- QR visibility (client-side only — avoids the wrong phone scanning the wrong code) ----------
+const qrSectionEl = document.getElementById("qrSection");
+const qrToggleEl = document.getElementById("qrToggle");
+function applyQrVisibility(show) {
+  qrSectionEl.classList.toggle("hidden", !show);
+  qrToggleEl.checked = show;
+}
+applyQrVisibility(localStorage.getItem("sr_qr") !== "0");
+qrToggleEl.addEventListener("change", () => {
+  applyQrVisibility(qrToggleEl.checked);
+  localStorage.setItem("sr_qr", qrToggleEl.checked ? "1" : "0");
+});
+
+let WIN_SCORE = parseInt(localStorage.getItem("sr_winscore"), 10) || 10;  // outlast points: +1 for every snake that crashes while you live
+const WIN_SCORE_OPTIONS = [5, 10, 15, 20];
+const winScoreSegEl = document.getElementById("winScoreSeg");
+function renderWinScoreSeg() {
+  winScoreSegEl.innerHTML = WIN_SCORE_OPTIONS.map(n =>
+    `<button class="segBtn${n === WIN_SCORE ? " active" : ""}" data-n="${n}">${n}</button>`
+  ).join("");
+}
+renderWinScoreSeg();
+winScoreSegEl.addEventListener("click", (e) => {
+  const b = e.target.closest(".segBtn");
+  if (!b) return;
+  WIN_SCORE = parseInt(b.dataset.n, 10);
+  localStorage.setItem("sr_winscore", WIN_SCORE);
+  renderWinScoreSeg();
+  renderSide();
+});
+document.getElementById("newMatchBtn").addEventListener("click", () => toLobby());
+const SHRINK_AFTER_S = 35;     // ring starts shrinking to break stalemates
+const SHRINK_DUR_S = 25;
+const BOOST_MS = 800, BOOST_CD = 3000;
+
+let W = 0, H = 0, dpr = 1, minDim = 0;
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = stage.clientWidth; H = stage.clientHeight;
+  minDim = Math.min(W, H);
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  makeSky();
+}
+
+// ---------- pre-rendered sky: ambient particles, themed per mood ----------
+// space/cyber: crisp dot stars tinted per theme · jungle/ice/arena: drifting glyphs (leaves/snow/dust)
+let starsFar = null, starsNear = null;
+let decor = []; // per-theme foreground framing (vines, torches, aurora, circuit traces, bubbles...)
+function makeSky() {
+  if (!W || !H) return;
+  const dotSky = (n, maxR, alpha, tint) => {
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    for (let i = 0; i < n; i++) {
+      const r = 0.4 + Math.random() * maxR;
+      g.beginPath();
+      g.arc(Math.random() * W, Math.random() * H, r, 0, Math.PI * 2);
+      g.fillStyle = tint(alpha * (0.3 + Math.random() * 0.7));
+      g.fill();
+    }
+    return c;
+  };
+  const glyphSky = (n, size, alpha, glyphs) => {
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    g.textAlign = "center"; g.textBaseline = "middle";
+    for (let i = 0; i < n; i++) {
+      const s = size * (0.6 + Math.random() * 0.8);
+      g.font = `${s | 0}px system-ui, sans-serif`;
+      g.globalAlpha = alpha * (0.3 + Math.random() * 0.7);
+      g.fillText(glyphs[(Math.random() * glyphs.length) | 0], Math.random() * W, Math.random() * H);
+    }
+    g.globalAlpha = 1;
+    return c;
+  };
+  if (theme.mood === "cyber") {
+    const tint = (a) => `rgba(${Math.random() < 0.5 ? "255,68,196" : "48,226,255"},${a})`;
+    starsFar = dotSky(Math.round(W * H / 11000), 1.1, 0.55, tint);
+    starsNear = dotSky(Math.round(W * H / 26000), 2.1, 0.85, tint);
+  } else if (theme.mood === "jungle") {
+    starsFar = glyphSky(Math.round(W * H / 26000), 10, 0.35, theme.glyphs);
+    starsNear = glyphSky(Math.round(W * H / 40000), 15, 0.55, theme.glyphs);
+  } else if (theme.mood === "ice") {
+    starsFar = glyphSky(Math.round(W * H / 20000), 7, 0.4, theme.glyphs);
+    starsNear = glyphSky(Math.round(W * H / 32000), 11, 0.65, theme.glyphs);
+  } else if (theme.mood === "arena") {
+    starsFar = glyphSky(Math.round(W * H / 9000), 3, 0.3, theme.glyphs);
+    starsNear = glyphSky(Math.round(W * H / 18000), 4, 0.45, theme.glyphs);
+  } else {
+    const tint = (a) => `rgba(${200 + Math.random() * 55 | 0},${210 + Math.random() * 45 | 0},255,${a})`;
+    starsFar = dotSky(Math.round(W * H / 9000), 1.1, 0.5, tint);
+    starsNear = dotSky(Math.round(W * H / 22000), 1.9, 0.8, tint);
+  }
+
+  // foreground framing elements — deterministic per resize/theme so they don't jitter each frame
+  decor = [];
+  if (theme.mood === "jungle") {
+    const n = Math.max(5, Math.round(W / 220));
+    for (let i = 0; i < n; i++) {
+      const fromTop = i % 2 === 0;
+      decor.push({
+        x: (i + 0.5) / n * W + (Math.random() - 0.5) * 40,
+        fromTop, len: H * (0.14 + Math.random() * 0.16),
+        phase: Math.random() * TAU, sway: 8 + Math.random() * 10,
+        leaf: theme.glyphs[(Math.random() * theme.glyphs.length) | 0],
+      });
+    }
+  } else if (theme.mood === "arena") {
+    const n = 6;
+    for (let i = 0; i < n; i++) {
+      const edge = i % 2 === 0 ? 0 : 1; // 0 = left column, 1 = right column
+      decor.push({
+        edge, y: (0.12 + 0.76 * Math.random()) * H,
+        phase: Math.random() * TAU,
+      });
+    }
+  } else if (theme.mood === "ice") {
+    for (let i = 0; i < 3; i++) {
+      decor.push({
+        band: i, phase: Math.random() * TAU,
+        hue: 150 + i * 40, amp: H * (0.03 + 0.015 * i),
+      });
+    }
+  } else if (theme.mood === "cyber") {
+    for (let i = 0; i < 4; i++) {
+      decor.push({
+        corner: i, phase: Math.random() * TAU,
+        len: minDim * (0.12 + Math.random() * 0.1),
+      });
+    }
+  }
+}
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const TAU = Math.PI * 2;
+window.addEventListener("resize", resize);
+resize();
+
+// ---------- audio ----------
+let actx = null, master = null;
+function ensureAudio() {
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = 0.35;
+    master.connect(actx.destination);
+  }
+  if (actx.state === "suspended") actx.resume();
+}
+window.addEventListener("pointerdown", ensureAudio);
+window.addEventListener("keydown", ensureAudio);
+function tone(freq, dur = 0.08, type = "triangle", vol = 1, slideTo = 0) {
+  if (!actx || actx.state !== "running") return;
+  const t = actx.currentTime;
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(40, slideTo), t + dur);
+  g.gain.setValueAtTime(vol * 0.25, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur);
+}
+const sfx = {
+  boost: () => tone(280, 0.15, "sine", 0.8, 560),
+  pick: () => { tone(660, 0.08, "triangle", 0.8); setTimeout(() => tone(990, 0.12, "triangle", 0.8), 70); },
+  crash: () => { tone(440, 0.1, "triangle", 0.9); setTimeout(() => tone(180, 0.35, "sawtooth", 0.7, 60), 80); },
+  join: () => { tone(523, 0.09, "triangle", 0.7); setTimeout(() => tone(784, 0.12, "triangle", 0.7), 80); },
+  beep: () => tone(440, 0.1, "sine", 0.7),
+  go: () => tone(880, 0.25, "sine", 0.9),
+  round: () => [523, 659, 784].forEach((f, i) => setTimeout(() => tone(f, 0.18, "triangle", 0.8), i * 110)),
+  win: () => [523, 659, 784, 1047, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.22, "triangle", 0.9), i * 130)),
+};
+
+// ---------- state ----------
+const state = {
+  phase: "lobby",
+  players: new Map(),
+  particles: [],
+  pickups: [],                    // power-ups on the floor
+  emotes: [],                     // trash-talk bubbles: {x, y, e, name, color, at}
+  waves: [],                      // crash shockwaves: {x, y, color, at}
+  feed: [],                       // kill feed: {text, color, at}
+  round: 0, roundStart: 0,
+  countdownEnd: 0, cdLast: -1, cdPopAt: 0,
+  roundEndAt: 0, roundWinner: null,
+  matchWinner: null, matchEndAt: 0, confettiUntil: 0,
+  shake: 0,
+};
+let usedColors = 0;
+
+// species picked on the phone controller is purely cosmetic — it just claims a color
+const SPECIES_COLORS = {
+  cobra: "#5ec8b0", python: "#8de85e", viper: "#e8836e", mamba: "#7a8ce8",
+  anaconda: "#e8c56e", rattlesnake: "#e85e8f", boa: "#a78bfa", taipan: "#6fb1e8",
+};
+const SPECIES_NAMES = {
+  cobra: "Cobra", python: "Python", viper: "Viper", mamba: "Black Mamba",
+  anaconda: "Anaconda", rattlesnake: "Rattlesnake", boa: "Boa", taipan: "Taipan",
+};
+// each species has a distinct body pattern + head features, so snakes differ in more than color
+const SPECIES_STYLE = {
+  cobra:       { pattern: "chevrons", hood: true },
+  python:      { pattern: "blotches" },
+  viper:       { pattern: "zigzag" },
+  mamba:       { pattern: "plain" },
+  anaconda:    { pattern: "rings" },
+  rattlesnake: { pattern: "diamonds", rattle: true },
+  boa:         { pattern: "bands" },
+  taipan:      { pattern: "speckle" },
+};
+const DEFAULT_PATTERNS = ["bands", "blotches", "diamonds", "chevrons", "rings", "zigzag", "speckle", "plain"];
+const styleFor = (speciesKey, idx) =>
+  SPECIES_STYLE[speciesKey] || { pattern: DEFAULT_PATTERNS[idx % DEFAULT_PATTERNS.length] };
+
+function makePlayer(id, name, speciesKey) {
+  const idx = usedColors++;
+  const takenColors = new Set([...state.players.values()].map(p => p.color));
+  let color = SPECIES_COLORS[speciesKey];
+  // cycle the curated palette first; beyond that, generate evenly-spaced hues so any number of players stay distinct
+  if (!color || takenColors.has(color)) {
+    color = idx < PLAYER_COLORS.length ? PLAYER_COLORS[idx] : `hsl(${(idx * 137.5) % 360}, 70%, 62%)`;
+  }
+  return {
+    id, name, color, species: SPECIES_NAMES[speciesKey] || null, style: styleFor(speciesKey, idx),
+    score: 0, ready: false,
+    x: 0, y: 0, dir: 0, inx: 0, iny: 0,
+    trail: [],                    // points [x, y, gap] — gap points draw/kill nothing
+    alive: false, queued: false,
+    boostUntil: 0, boostAt: 0,    // boosting-until / cooldown-until
+    gapUntil: 0, nextGapAt: 0,    // automatic escape gaps
+    ghostUntil: 0,                // 👻 power-up: phase through trails
+    shieldUntil: 0,                // 🛡️ power-up: survive one wall/trail hit
+    slowUntil: 0,                  // ❄️ power-up (inflicted by someone else): half speed
+  };
+}
+
+// ---------- networking ----------
+let ws = null;
+function connect() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}`);
+  ws.onopen = () => ws.send(JSON.stringify({ t: "hello", role: "host" }));
+  ws.onclose = () => setTimeout(connect, 1000);
+  ws.onmessage = (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.t === "roster") {
+      for (const p of m.players) if (!state.players.has(p.id)) addPlayer(p.id, p.name, p.species);
+    } else if (m.t === "join") {
+      addPlayer(m.id, m.name, m.species);
+    } else if (m.t === "leave") {
+      state.players.delete(m.id);
+      renderSide();
+    } else if (m.t === "in") {
+      const p = state.players.get(m.id);
+      if (p) { p.inx = clamp(m.x, -1, 1); p.iny = clamp(m.y, -1, 1); }
+    } else if (m.t === "boost") {
+      doBoost(state.players.get(m.id));
+    } else if (m.t === "ready") {
+      const p = state.players.get(m.id);
+      if (p) p.ready = !!m.v;
+      renderSide();
+    } else if (m.t === "species") {
+      const p = state.players.get(m.id);
+      if (p) {
+        const takenColors = new Set([...state.players.values()].filter(q => q !== p).map(q => q.color));
+        const color = SPECIES_COLORS[m.key];
+        if (color && !takenColors.has(color)) p.color = color;
+        p.species = SPECIES_NAMES[m.key] || null;
+        p.style = styleFor(m.key, 0);
+        sendTo(p.id, { t: "you", color: p.color, name: p.name });
+        renderSide();
+      }
+    } else if (m.t === "emo") {
+      doEmote(state.players.get(m.id), m.e);
+    }
+  };
+}
+function sendTo(id, m) { if (ws?.readyState === 1) ws.send(JSON.stringify({ t: "to", id, m })); }
+function sendAll(m) { if (ws?.readyState === 1) ws.send(JSON.stringify({ t: "all", m })); }
+function kickPlayer(id) { if (ws?.readyState === 1) ws.send(JSON.stringify({ t: "kick", id })); }
+
+function addPlayer(id, name, speciesKey) {
+  const p = makePlayer(id, name, speciesKey);
+  p.queued = state.phase !== "lobby";
+  if (!p.queued) spawnInRing(p, performance.now());
+  state.players.set(id, p);
+  sendTo(id, { t: "you", color: p.color, name: p.name });
+  sendTo(id, { t: "st", phase: p.queued ? "queued" : "lobby" });
+  sfx.join();
+  renderSide();
+}
+
+// ---------- sidebar dashboard ----------
+const qrListEl = document.getElementById("qrList");
+const noNetEl = document.getElementById("noNet");
+const dashUrlEl = document.getElementById("dashUrl");
+const playersEl = document.getElementById("players");
+playersEl.addEventListener("click", (e) => {
+  const b = e.target.closest(".kickBtn");
+  if (b) kickPlayer(parseInt(b.dataset.id, 10));
+});
+const pcountEl = document.getElementById("pcount");
+const kickUnreadyBtn = document.getElementById("kickUnreadyBtn");
+kickUnreadyBtn.addEventListener("click", () => {
+  for (const p of [...state.players.values()]) {
+    if (!p.ready) kickPlayer(p.id);
+  }
+});
+const matchPhaseEl = document.getElementById("matchPhase");
+const matchSubEl = document.getElementById("matchSub");
+const matchStatsEl = document.getElementById("matchStats");
+
+let lastAddrs = "";
+let otherNetsOpen = false;
+function qrItem(a, port) {
+  return `<div class="qrItem">
+    <div class="qlbl">${a.label}</div>
+    <img src="/qr.png?addr=${encodeURIComponent(a.addr)}" alt="${a.label} join QR">
+    <div class="qurl">http://${a.addr}:${port}/c</div>
+    ${a.label === "VPN" ? `<div class="qnote">for players on the same VPN — needs client-to-client allowed</div>` : ""}
+  </div>`;
+}
+async function loadJoinInfo() {
+  try {
+    const r = await fetch("/info");
+    const { port, addresses } = await r.json();
+    const key = JSON.stringify(addresses);
+    if (key !== lastAddrs) {
+      lastAddrs = key;
+      const list = addresses || [];
+      // show only the primary network's QR by default — other options (Ethernet/VPN) are one click away,
+      // so nobody scans a code for a network they're not actually on
+      const primary = list.find(a => a.label === "Wi-Fi") || list.find(a => a.label !== "VPN") || list[0];
+      const rest = list.filter(a => a !== primary);
+      qrListEl.innerHTML =
+        (primary ? qrItem(primary, port) : "") +
+        (rest.length ? `
+          <button id="otherNetsBtn" type="button">${otherNetsOpen ? "Hide" : "Show"} ${rest.length} other network option${rest.length > 1 ? "s" : ""}</button>
+          <div id="otherNets" style="display:${otherNetsOpen ? "flex" : "none"}; flex-direction:column; gap:18px;">
+            ${rest.map(a => qrItem(a, port)).join("")}
+          </div>` : "");
+      document.getElementById("otherNetsBtn")?.addEventListener("click", () => {
+        otherNetsOpen = !otherNetsOpen;
+        lastAddrs = "";   // force a re-render so the toggle state takes effect immediately
+        loadJoinInfo();
+      });
+    }
+    noNetEl.style.display = addresses?.length ? "none" : "";
+    const primary = (addresses || []).find(a => a.label === "Wi-Fi") || (addresses || []).find(a => a.label !== "VPN") || addresses?.[0];
+    dashUrlEl.textContent = primary ? `http://${primary.addr}:${port}` : "No local network found";
+  } catch {}
+}
+loadJoinInfo();
+setInterval(loadJoinInfo, 5000);
+
+function chipFor(p) {
+  if (state.phase === "lobby") return p.ready ? ["ready", "READY ✓"] : ["waiting", "WAITING"];
+  if (p.queued) return ["queued", "NEXT ROUND"];
+  if (state.phase === "play") return p.alive ? ["playing", "ALIVE"] : ["out", "CRASHED"];
+  return ["playing", "IN GAME"];
+}
+
+function renderSide() {
+  const ps = [...state.players.values()];
+  pcountEl.textContent = ps.length ? `· ${ps.length}` : "";
+  const unreadyCount = ps.filter(p => !p.ready).length;
+  kickUnreadyBtn.style.display = state.phase === "lobby" && unreadyCount ? "" : "none";
+  kickUnreadyBtn.textContent = `Remove not ready (${unreadyCount})`;
+  if (!ps.length) {
+    playersEl.innerHTML = `<div id="noPlayers">Waiting for players…</div>`;
+  } else {
+    playersEl.innerHTML = ps
+      .slice().sort((a, b) => b.score - a.score)
+      .map(p => {
+        const [cls, txt] = chipFor(p);
+        return `<div class="prow">
+          <div class="dot" style="background:${p.color};color:${p.color}" title="${p.species || ""}"></div>
+          <div class="pname">${p.name.replace(/[<>&]/g, "")}${p.species ? ` <span class="pspecies">· ${p.species}</span>` : ""}</div>
+          <div class="chip ${cls}">${txt}</div>
+          <div class="score" style="color:${p.color}">${p.score}</div>
+          <button class="kickBtn" data-id="${p.id}" title="Remove ${p.name.replace(/[<>&"]/g, "")}">✕</button>
+        </div>`;
+      }).join("");
+  }
+
+  const ph = {
+    lobby: ["Lobby", state.players.size < 2 ? "Need at least 2 players" : "Everyone tap Ready to start"],
+    countdown: ["Starting…", "Get ready"],
+    play: [`Round ${state.round}`, "Dodge every trail — outlast to score"],
+    roundend: ["Round over", "Next round starting…"],
+    matchend: ["Match over 🏆", state.matchWinner ? `${state.matchWinner.name} is the champion` : ""],
+  }[state.phase] || [state.phase, ""];
+  matchPhaseEl.textContent = ph[0];
+  matchSubEl.textContent = ph[1] || `+1 for every snake you outlast · first to ${WIN_SCORE}`;
+
+  if (state.phase === "play") {
+    const now = performance.now();
+    const alive = ps.filter(p => p.alive && !p.queued).length;
+    const inPlay = ps.filter(p => !p.queued).length;
+    const elapsed = Math.max(0, Math.floor((now - state.roundStart) / 1000));
+    const untilShrink = Math.ceil(SHRINK_AFTER_S - (now - state.roundStart) / 1000);
+    const leader = ps.slice().sort((a, b) => b.score - a.score)[0];
+    matchStatsEl.innerHTML = `
+      <div class="stat"><b>${alive}/${inPlay}</b><span>Alive</span></div>
+      <div class="stat"><b>${elapsed}s</b><span>Elapsed</span></div>
+      <div class="stat"><b style="${untilShrink <= 0 ? "color:#e8836e" : ""}">${untilShrink > 0 ? untilShrink + "s" : "closing"}</b><span>Shrink</span></div>
+      ${leader && leader.score > 0 ? `<div class="stat"><b style="color:${leader.color}">${leader.name}</b><span>Leader</span></div>` : ""}
+    `;
+  } else {
+    matchStatsEl.innerHTML = "";
+  }
+}
+setInterval(renderSide, 1000);
+
+// ---------- game flow ----------
+// arena is a rounded-rect energy cage; hw/hh are half-extents, rr the corner radius
+const arena = { cx: 0, cy: 0, hw: 0, hh: 0, hw0: 0, hh0: 0, rr: 0 };
+
+function fitArena() {
+  arena.cx = W / 2; arena.cy = H / 2;
+  arena.hw0 = arena.hw = W * 0.49;
+  arena.hh0 = arena.hh = H * 0.46;
+  arena.rr = minDim * 0.05;
+}
+
+// signed distance from the rounded-rect wall (positive = beyond it)
+function wallDepth(x, y) {
+  const dx = Math.max(0, Math.abs(x - arena.cx) - (arena.hw - arena.rr));
+  const dy = Math.max(0, Math.abs(y - arena.cy) - (arena.hh - arena.rr));
+  return Math.hypot(dx, dy) - arena.rr;
+}
+
+function spawnInRing(p, now) {
+  p.x = arena.cx + (Math.random() - 0.5) * arena.hw;
+  p.y = arena.cy + (Math.random() - 0.5) * arena.hh;
+  p.dir = Math.random() * TAU;
+  p.trail = [];
+  p.alive = true;
+  p.gapUntil = 0;
+  p.ghostUntil = 0;
+  p.shieldUntil = 0;
+  p.slowUntil = 0;
+  p.nextGapAt = now + 2000 + Math.random() * 2000;
+}
+
+function startCountdown(now) {
+  state.phase = "countdown";
+  state.countdownEnd = now + 3000;
+  state.cdLast = -1;
+  fitArena();
+  // place everyone on the spawn circle now, frozen, so players see where they'll start
+  const all = [...state.players.values()];
+  all.forEach(p => { p.queued = false; });
+  const n = all.length;
+  all.forEach((p, i) => {
+    const a = (i / n) * TAU - Math.PI / 2;
+    p.x = arena.cx + Math.cos(a) * arena.hw0 * 0.62;
+    p.y = arena.cy + Math.sin(a) * arena.hh0 * 0.62;
+    p.dir = a + Math.PI / 2;      // tangential: everyone starts circling
+    p.trail = [];
+    p.alive = true;
+    p.ghostUntil = 0;
+    p.shieldUntil = 0;
+    p.slowUntil = 0;
+    p.inx = p.iny = 0;
+  });
+  sendAll({ t: "st", phase: "countdown" });
+  renderSide();
+}
+function startRound(now) {
+  state.round++;
+  state.roundStart = now;
+  state.feed.length = 0;
+  state.pickups.length = 0;
+  state.comet = null;
+  cometAt = now + COMET_AFTER_MS;
+  nextPickupAt = now + 2000;
+  for (const p of state.players.values()) {
+    if (!p.alive) continue;
+    p.boostUntil = p.boostAt = p.gapUntil = 0;
+    p.shieldUntil = p.slowUntil = 0;
+    p.nextGapAt = now + 2500 + Math.random() * 2000;
+    sendTo(p.id, { t: "st", phase: "play" });
+  }
+  state.phase = "play";
+  sfx.go();
+  renderSide();
+}
+function endRound(now, winner) {
+  state.phase = "roundend";
+  state.roundEndAt = now + 3000;
+  state.roundWinner = winner;
+  if (winner) {
+    sendTo(winner.id, { t: "st", phase: "roundwin" });
+    sfx.round();
+  }
+  for (const p of state.players.values()) {
+    if (p !== winner) sendTo(p.id, { t: "st", phase: "roundend" });
+  }
+  // match ends between rounds, on points; ties play another round
+  const ps = [...state.players.values()];
+  const top = ps.reduce((a, b) => (b.score > a.score ? b : a), ps[0]);
+  if (top && top.score >= WIN_SCORE && ps.filter(p => p.score === top.score).length === 1) {
+    endMatch(now, top);
+  }
+  renderSide();
+}
+function endMatch(now, winner) {
+  state.phase = "matchend";
+  state.matchWinner = winner;
+  state.matchEndAt = now + 6000;
+  state.confettiUntil = now + 2500;
+  sendTo(winner.id, { t: "st", phase: "matchwin" });
+  for (const p of state.players.values()) {
+    if (p !== winner) sendTo(p.id, { t: "st", phase: "matchend" });
+  }
+  sfx.win();
+}
+function toLobby() {
+  const now = performance.now();
+  state.phase = "lobby";
+  state.round = 0;
+  state.feed.length = 0;
+  state.pickups.length = 0;
+  fitArena();
+  for (const p of state.players.values()) {
+    p.score = 0; p.ready = false; p.queued = false;
+    spawnInRing(p, now);
+  }
+  sendAll({ t: "st", phase: "lobby" });
+  renderSide();
+}
+
+function doBoost(p) {
+  if (!p || !p.alive || !["play", "lobby"].includes(state.phase)) return;
+  const now = performance.now();
+  if (now < p.boostAt) return;
+  p.boostUntil = now + BOOST_MS;
+  p.boostAt = now + BOOST_CD;
+  sendTo(p.id, { t: "boost", cd: BOOST_CD });
+  sfx.boost();
+  burst(p.x, p.y, p.color, 8, 160);
+}
+
+// ---------- emoji trash talk ----------
+const EMOJI_OK = new Set(["😂", "😱", "🔥", "💀", "🐍", "👏", "😈", "🫵"]);
+function doEmote(p, e) {
+  if (!p || !EMOJI_OK.has(e)) return;
+  const now = performance.now();
+  if (now - (p.lastEmoteAt || 0) < 1500) return;   // rate limit per player
+  p.lastEmoteAt = now;
+  const anchored = p.alive && !p.queued;
+  state.emotes.push({
+    x: anchored ? p.x : W * (0.25 + Math.random() * 0.5),
+    y: anchored ? p.y - headR() * 5 : H * 0.16,
+    e, name: p.name, color: p.color, at: now,
+  });
+  if (state.emotes.length > 8) state.emotes.shift();
+  sendAll({ t: "emo", e, name: p.name, color: p.color });
+  tone(740, 0.07, "triangle", 0.5);
+}
+
+function drawEmotes(now) {
+  state.emotes = state.emotes.filter(e => now - e.at < 2400);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const e of state.emotes) {
+    const k = (now - e.at) / 2400;
+    const rise = k * minDim * 0.09;
+    const popIn = Math.min(1, k * 12);
+    ctx.globalAlpha = popIn * clamp(1 - (k - 0.75) * 4, 0, 1);
+    ctx.font = `${Math.round(minDim * 0.055 * (0.7 + 0.3 * popIn))}px system-ui, sans-serif`;
+    ctx.fillText(e.e, e.x, e.y - rise);
+    ctx.font = `600 ${Math.round(minDim * 0.016)}px system-ui, sans-serif`;
+    ctx.fillStyle = e.color;
+    ctx.fillText(e.name, e.x, e.y - rise + minDim * 0.045);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- particles ----------
+function burst(x, y, color, n = 14, speed = 240) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * TAU, s = speed * (0.3 + Math.random() * 0.7);
+    state.particles.push({
+      x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+      life: 0.5 + Math.random() * 0.4, maxLife: 0.9,
+      color, size: 2 + Math.random() * 3, grav: 60,
+    });
+  }
+}
+function confetti() {
+  const cols = PLAYER_COLORS.concat("#f2f4fa");
+  for (let i = 0; i < 6; i++) {
+    state.particles.push({
+      x: Math.random() * W, y: -10, vx: (Math.random() - 0.5) * 260, vy: 60 + Math.random() * 120,
+      life: 2.2 + Math.random(), maxLife: 3, color: cols[(Math.random() * cols.length) | 0],
+      size: 3 + Math.random() * 4, grav: 320,
+    });
+  }
+}
+
+// ---------- snake movement ----------
+const POINT_GAP = 3;   // px between recorded trail points
+const trailW = () => Math.max(3.5, minDim * 0.0075);
+const headR = () => trailW() * 1.1;
+const speed = () => minDim * 0.16;
+const TURN = 3.7;      // rad/s toward the joystick direction
+// everyone gradually speeds up during a round — endgames get frantic
+const ramp = (now) => state.phase === "play" ? 1 + Math.min(0.45, (now - state.roundStart) / 1000 * 0.008) : 1;
+
+function steer(p, dt) {
+  const mag = Math.hypot(p.inx, p.iny);
+  if (mag > 0.25) {
+    const want = Math.atan2(p.iny, p.inx);
+    let d = want - p.dir;
+    while (d > Math.PI) d -= TAU;
+    while (d < -Math.PI) d += TAU;
+    const max = TURN * dt * Math.min(1, mag * 1.4);
+    p.dir += clamp(d, -max, max);
+  }
+}
+
+function advance(p, dt, now, leaveTrail) {
+  steer(p, dt);
+  const boosting = now < p.boostUntil;
+  const slowed = now < p.slowUntil;
+  const v = speed() * ramp(now) * (boosting ? 1.9 : 1) * (slowed ? 0.5 : 1);
+  p.x += Math.cos(p.dir) * v * dt;
+  p.y += Math.sin(p.dir) * v * dt;
+
+  if (!leaveTrail) return;
+  // automatic escape gaps + gaps while boosting
+  if (now >= p.nextGapAt) {
+    p.gapUntil = now + 260;
+    p.nextGapAt = now + 2800 + Math.random() * 2200;
+  }
+  const gap = boosting || now < p.gapUntil || now < p.ghostUntil;
+  const t = p.trail, last = t[t.length - 1];
+  if (!last || (p.x - last[0]) ** 2 + (p.y - last[1]) ** 2 >= POINT_GAP * POINT_GAP) {
+    t.push([p.x, p.y, gap ? 1 : 0]);
+  }
+}
+
+// lobby: free practice — short fading trails, harmless, bounce off the walls
+function lobbyPhysics(dt, now) {
+  fitArena();
+  const hr = headR();
+  for (const p of state.players.values()) {
+    if (!p.alive) continue;
+    advance(p, dt, now, true);
+    if (p.trail.length > 70) p.trail.shift();
+    const mx = arena.hw - hr, my = arena.hh - hr;
+    if (Math.abs(p.x - arena.cx) > mx) {
+      p.x = arena.cx + Math.sign(p.x - arena.cx) * mx;
+      p.dir = Math.PI - p.dir;
+    }
+    if (Math.abs(p.y - arena.cy) > my) {
+      p.y = arena.cy + Math.sign(p.y - arena.cy) * my;
+      p.dir = -p.dir;
+    }
+  }
+}
+
+// crashes within the same physics tick are scored together (see physics()) so that
+// two snakes dying in the same frame don't get outlast credit for each other
+let tickCrashes = [];
+function crash(p, now) {
+  p.alive = false;
+  sfx.crash();
+  state.shake = 12;
+  burst(p.x, p.y, p.color, 36, 400);
+  state.waves.push({ x: p.x, y: p.y, color: p.color, at: now });
+  sendTo(p.id, { t: "st", phase: "out" });
+  tickCrashes.push(p);
+  state.feed.push({ text: `${p.name} crashed!`, color: p.color, at: now });
+  if (state.feed.length > 4) state.feed.shift();
+  renderSide();
+}
+
+function physics(now, dt) {
+  tickCrashes = [];
+  const t = (now - state.roundStart) / 1000;
+  const sh = 1 - 0.45 * clamp((t - SHRINK_AFTER_S) / SHRINK_DUR_S, 0, 1);
+  arena.hw = arena.hw0 * sh;
+  arena.hh = arena.hh0 * sh;
+
+  const alive = [...state.players.values()].filter(p => p.alive && !p.queued);
+  for (const p of alive) advance(p, dt, now, true);
+
+  updatePickups(now);
+  updateComet(now, dt);
+
+  const hr = headR(), tw = trailW();
+  const kill2 = (hr + tw / 2) ** 2;
+  const players = [...state.players.values()];
+  const absorb = (p) => { p.shieldUntil = 0; burst(p.x, p.y, "#4ade80", 20, 300); };
+  for (const p of alive) {
+    // walls
+    if (wallDepth(p.x, p.y) > -hr) {
+      if (now < p.shieldUntil) { absorb(p); }
+      else { crash(p, now); continue; }
+    }
+    // pickups
+    for (const g of state.pickups) {
+      if (!g.taken && (p.x - g.x) ** 2 + (p.y - g.y) ** 2 < (hr * 3) ** 2) collect(p, g, now);
+    }
+    // comet: deadly to the touch (shield still saves you)
+    const cm = state.comet;
+    if (cm && (p.x - cm.x) ** 2 + (p.y - cm.y) ** 2 < (cm.r + hr) ** 2) {
+      if (now < p.shieldUntil) { absorb(p); }
+      else {
+        crash(p, now);
+        state.feed[state.feed.length - 1].text = `${p.name} was hit by the comet ☄️`;
+        continue;
+      }
+    }
+    // trails (own recent points excluded so you don't die on your own neck)
+    if (now < p.ghostUntil) continue;   // 👻 phases through every trail
+    const skipOwn = Math.ceil((hr * 3) / POINT_GAP) + 2;
+    for (const q of players) {
+      const tr = q.trail;
+      const end = q === p ? tr.length - skipOwn : tr.length;
+      for (let i = 0; i < end; i++) {
+        const pt = tr[i];
+        if (pt[2]) continue; // gap
+        if ((p.x - pt[0]) ** 2 + (p.y - pt[1]) ** 2 < kill2) {
+          if (now < p.shieldUntil) absorb(p);
+          else crash(p, now);
+          break;
+        }
+      }
+      if (!p.alive) break;
+    }
+  }
+
+  // outlast scoring: award once per crash this tick, to whoever is still standing after all of them resolve
+  if (tickCrashes.length) {
+    const survivors = [...state.players.values()].filter(q => q.alive && !q.queued);
+    for (let i = 0; i < tickCrashes.length; i++) {
+      for (const q of survivors) q.score++;
+    }
+  }
+
+  const still = alive.filter(p => p.alive);
+  if (still.length <= 1 && state.players.size >= 2) {
+    endRound(now, still[0] || null);
+  }
+}
+
+// ---------- power-ups ----------
+// gem: +1 point now · turbo: instant boost recharge + long burst · ghost: pass through trails
+// shield: survive one wall/trail hit · freeze: slows every other snake for a few seconds
+const PICKUPS = {
+  gem:    { glyph: "💎", color: "#e8c56e" },
+  turbo:  { glyph: "⚡", color: "#6fb1e8" },
+  ghost:  { glyph: "👻", color: "#a78bfa" },
+  shield: { glyph: "🛡️", color: "#4ade80" },
+  freeze: { glyph: "❄️", color: "#7dd3fc" },
+  trim:   { glyph: "✂️", color: "#f472b6" },   // shears everyone else's trail short
+  warp:   { glyph: "🌀", color: "#22d3ee" },   // teleport to a random spot (trail breaks)
+};
+let nextPickupAt = 0, pickupSeq = 0;
+
+// ---------- comet hazard: a bouncing fireball that arrives mid-round to punish camping ----------
+const COMET_AFTER_MS = 20000;
+let cometAt = Infinity;
+function updateComet(now, dt) {
+  if (!state.comet && now >= cometAt && state.phase === "play") {
+    const a = Math.random() * TAU, v = minDim * 0.13;
+    state.comet = {
+      x: arena.cx + (Math.random() - 0.5) * arena.hw,
+      y: arena.cy - arena.hh * 0.9,
+      vx: Math.cos(a) * v, vy: Math.abs(Math.sin(a)) * v + v * 0.3,
+      r: minDim * 0.014,
+    };
+    state.feed.push({ text: "☄️ Comet incoming!", color: "#ffb454", at: now });
+    if (state.feed.length > 4) state.feed.shift();
+    sfx.beep();
+  }
+  const c = state.comet;
+  if (!c) return;
+  c.x += c.vx * dt; c.y += c.vy * dt;
+  // bounce inside the cage
+  const mx = arena.hw - c.r, my = arena.hh - c.r;
+  if (Math.abs(c.x - arena.cx) > mx) { c.x = arena.cx + Math.sign(c.x - arena.cx) * mx; c.vx *= -1; }
+  if (Math.abs(c.y - arena.cy) > my) { c.y = arena.cy + Math.sign(c.y - arena.cy) * my; c.vy *= -1; }
+  // fiery wake
+  if (Math.random() < 0.7) {
+    state.particles.push({
+      x: c.x, y: c.y, vx: -c.vx * 0.25 + (Math.random() - 0.5) * 50, vy: -c.vy * 0.25 + (Math.random() - 0.5) * 50,
+      life: 0.35 + Math.random() * 0.3, maxLife: 0.65,
+      color: Math.random() < 0.5 ? "#ffb454" : "#ff6e32", size: 2 + Math.random() * 2.5, grav: 0,
+    });
+  }
+}
+function drawComet(t) {
+  const c = state.comet;
+  if (!c || state.phase !== "play") return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r * 4);
+  g.addColorStop(0, "rgba(255,220,150,0.55)");
+  g.addColorStop(1, "rgba(255,110,50,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(c.x, c.y, c.r * 4, 0, TAU); ctx.fill();
+  ctx.restore();
+  ctx.font = `${Math.round(c.r * 3.4)}px system-ui, sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  ctx.rotate(Math.atan2(c.vy, c.vx) + Math.PI * 0.75);   // point the ☄️ tail away from travel
+  ctx.fillText("☄️", 0, 0);
+  ctx.restore();
+}
+
+function updatePickups(now) {
+  state.pickups = state.pickups.filter(g => !g.taken && now - g.born < 14000);
+  const maxPickups = clamp(5 + Math.ceil(state.players.size / 2), 6, 14);
+  if (state.pickups.length < maxPickups && now >= nextPickupAt) {
+    nextPickupAt = now + 1600 + Math.random() * 1400;
+    const kinds = Object.keys(PICKUPS);
+    const kind = kinds[(Math.random() * kinds.length) | 0];
+    // keep clear of the walls
+    state.pickups.push({
+      id: pickupSeq++,
+      kind,
+      x: arena.cx + (Math.random() - 0.5) * arena.hw * 1.4,
+      y: arena.cy + (Math.random() - 0.5) * arena.hh * 1.4,
+      born: now, taken: false,
+    });
+  }
+}
+
+function collect(p, g, now) {
+  g.taken = true;
+  const def = PICKUPS[g.kind];
+  burst(g.x, g.y, def.color, 18, 260);
+  sfx.pick();
+  if (g.kind === "gem") {
+    p.score++;
+    state.feed.push({ text: `${p.name} +1 💎`, color: p.color, at: now });
+  } else if (g.kind === "turbo") {
+    p.boostAt = 0;
+    p.boostUntil = now + BOOST_MS * 1.6;
+    state.feed.push({ text: `${p.name} grabbed turbo ⚡`, color: p.color, at: now });
+  } else if (g.kind === "ghost") {
+    p.ghostUntil = now + 3000;
+    state.feed.push({ text: `${p.name} went ghost 👻`, color: p.color, at: now });
+  } else if (g.kind === "shield") {
+    p.shieldUntil = now + 2500;
+    state.feed.push({ text: `${p.name} raised a shield 🛡️`, color: p.color, at: now });
+  } else if (g.kind === "freeze") {
+    for (const q of state.players.values()) {
+      if (q !== p && q.alive) { q.slowUntil = now + 2500; sendTo(q.id, { t: "fx", k: "frozen" }); }
+    }
+    state.feed.push({ text: `${p.name} froze the pack ❄️`, color: p.color, at: now });
+  } else if (g.kind === "trim") {
+    for (const q of state.players.values()) {
+      if (q !== p && q.trail.length > 20) {
+        const cutAt = Math.floor(q.trail.length * 0.5);
+        burst(q.trail[cutAt][0], q.trail[cutAt][1], "#f472b6", 10, 200);
+        q.trail = q.trail.slice(cutAt);
+      }
+    }
+    state.feed.push({ text: `${p.name} sheared the field ✂️`, color: p.color, at: now });
+  } else if (g.kind === "warp") {
+    burst(p.x, p.y, "#22d3ee", 24, 320);
+    p.gapUntil = now + 300;   // break the trail so the jump doesn't draw a killing line
+    p.x = arena.cx + (Math.random() - 0.5) * arena.hw * 1.3;
+    p.y = arena.cy + (Math.random() - 0.5) * arena.hh * 1.3;
+    burst(p.x, p.y, "#22d3ee", 24, 320);
+    state.waves.push({ x: p.x, y: p.y, color: "#22d3ee", at: now });
+    state.feed.push({ text: `${p.name} warped 🌀`, color: p.color, at: now });
+  }
+  if (state.feed.length > 4) state.feed.shift();
+  sendTo(p.id, { t: "fx", k: g.kind });
+  renderSide();
+}
+
+// ---------- live mini-view for phones (~15 Hz) ----------
+let lastView = 0;
+function sendView(now) {
+  if (ws?.readyState !== 1) return;
+  const U = Math.max(arena.hw0, arena.hh0) || 1;   // arena units: longest half-extent = 1000
+  const n = (v) => Math.round(v / U * 1000);
+  const ps = [...state.players.values()].filter(p => p.alive);
+  sendAll({
+    t: "v",
+    w: n(arena.hw), h: n(arena.hh),
+    g: state.pickups.filter(g => !g.taken).map(g => [n(g.x - arena.cx), n(g.y - arena.cy), g.kind]),
+    p: ps.map(p => [
+      p.id, n(p.x - arena.cx), n(p.y - arena.cy), p.color,
+      (now < p.boostUntil ? 1 : 0) + (now < p.ghostUntil ? 2 : 0) +
+      (now < p.shieldUntil ? 4 : 0) + (now < p.slowUntil ? 8 : 0),
+    ]),
+  });
+}
+
+// ---------- loop ----------
+let lastT = 0;
+function loop(now) {
+  const dt = Math.min((now - lastT) / 1000, 0.05);
+  lastT = now;
+
+  state.particles = state.particles.filter(p => (p.life -= dt) > 0);
+  for (const p of state.particles) {
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += p.grav * dt;
+  }
+  state.shake = Math.max(0, state.shake - dt * 30);
+  if (demo) demoSteer(now);
+
+  if (state.phase === "lobby") {
+    lobbyPhysics(dt, now);
+    const ps = [...state.players.values()];
+    if (ps.length >= 2 && ps.every(p => p.ready)) startCountdown(now);
+  } else if (state.phase === "countdown") {
+    const n = Math.ceil((state.countdownEnd - now) / 1000);
+    if (n !== state.cdLast) { state.cdLast = n; state.cdPopAt = now; if (n > 0) sfx.beep(); }
+    if (now >= state.countdownEnd) startRound(now);
+  } else if (state.phase === "play") {
+    physics(now, dt);
+    if (state.players.size < 2) toLobby();
+  } else if (state.phase === "roundend") {
+    if (now >= state.roundEndAt) {
+      if (state.players.size >= 2) startCountdown(now);
+      else toLobby();
+    }
+  } else if (state.phase === "matchend") {
+    if (now < state.confettiUntil) confetti();
+    if (now >= state.matchEndAt) toLobby();
+  }
+
+  if (now - lastView > 66) { lastView = now; sendView(now); }
+
+  draw(now);
+  requestAnimationFrame(loop);
+}
+
+// ---------- drawing ----------
+function draw(now) {
+  const t = now / 1000;
+  ctx.save();
+  if (state.shake > 0) ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
+
+  // deep-space backdrop
+  const bgg = ctx.createLinearGradient(0, 0, 0, H);
+  bgg.addColorStop(0, theme.bg[0]);
+  bgg.addColorStop(0.55, theme.bg[1]);
+  bgg.addColorStop(1, theme.bg[2]);
+  ctx.fillStyle = bgg;
+  ctx.fillRect(-20, -20, W + 40, H + 40);
+
+  // drifting parallax stars
+  if (starsFar) {
+    const dx1 = (t * 4) % W, dx2 = (t * 9) % W;
+    ctx.drawImage(starsFar, -dx1, 0); ctx.drawImage(starsFar, W - dx1, 0);
+    ctx.drawImage(starsNear, -dx2, 0); ctx.drawImage(starsNear, W - dx2, 0);
+  }
+
+  // slow-breathing nebula haze in the two brand colors
+  ctx.globalCompositeOperation = "lighter";
+  for (const [col, px, py, ph] of theme.nebula) {
+    const pulse = 0.5 + 0.5 * Math.sin(t * 0.23 + ph);
+    const R = minDim * (0.45 + 0.1 * pulse);
+    const g = ctx.createRadialGradient(W * px, H * py, 0, W * px, H * py, R);
+    g.addColorStop(0, `rgba(${col},${0.05 + 0.03 * pulse})`);
+    g.addColorStop(1, `rgba(${col},0)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+  ctx.globalCompositeOperation = "source-over";
+
+  drawArena(t, now);
+  if (state.phase === "play") drawPickups(now, t);
+  drawTrails(now);   // source-over: keeps the dark dorsal markings visible
+  drawComet(t);
+
+  ctx.globalCompositeOperation = "lighter";
+  drawWaves(now);
+  for (const p of state.particles) {
+    ctx.globalAlpha = clamp(p.life / p.maxLife, 0, 1);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+
+  drawHeads(now, t);
+  drawEmotes(now);
+  drawNames(now);
+  drawThemeDecor(t);
+  drawOverlay(now);
+
+  // vignette
+  const vg = ctx.createRadialGradient(W / 2, H / 2, minDim * 0.45, W / 2, H / 2, Math.max(W, H) * 0.75);
+  vg.addColorStop(0, "rgba(5,7,14,0)");
+  vg.addColorStop(1, "rgba(4,5,11,0.6)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+function cagePath(pad = 0) {
+  const { cx, cy, hw, hh, rr } = arena;
+  ctx.beginPath();
+  ctx.roundRect(cx - hw - pad, cy - hh - pad, (hw + pad) * 2, (hh + pad) * 2, rr + pad);
+}
+
+function drawArena(t, now) {
+  const { cx, cy, hw, hh } = arena;
+  const danger = hw < arena.hw0 * 0.85 && state.phase === "play";
+
+  // arena floor: subtle glow + grid, clipped to the cage
+  ctx.save();
+  cagePath();
+  ctx.clip();
+  const fg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(hw, hh));
+  fg.addColorStop(0, `rgba(${theme.accent},0.05)`);
+  fg.addColorStop(0.75, "rgba(232,235,245,0.02)");
+  fg.addColorStop(1, danger ? `rgba(${theme.danger},0.16)` : `rgba(${theme.accent},0.09)`);
+  ctx.fillStyle = fg;
+  ctx.fillRect(cx - hw, cy - hh, hw * 2, hh * 2);
+
+  // ground: floor style differs per theme so each arena reads as a distinct place
+  const FLOOR = {
+    grid:    { div: 16, color: "232,235,245", alpha: 0.045, width: 1,   dash: null },
+    cyber:   { div: 11, color: theme.accent,  alpha: 0.12,  width: 1.2, dash: null },
+    organic: { div: 9,  color: theme.accent,  alpha: 0.05,  width: 1.4, dash: [3, 9] },
+    frost:   { div: 20, color: "220,240,255", alpha: 0.08,  width: 1,   dash: null },
+    tile:    { div: 8,  color: theme.accent,  alpha: 0.1,   width: 1.6, dash: null },
+  }[theme.floorStyle] || { div: 16, color: "232,235,245", alpha: 0.045, width: 1, dash: null };
+  const cell = minDim / FLOOR.div, off = (t * 6) % cell;
+  ctx.strokeStyle = `rgba(${FLOOR.color},${FLOOR.alpha})`;
+  ctx.lineWidth = FLOOR.width;
+  if (FLOOR.dash) ctx.setLineDash(FLOOR.dash);
+  ctx.beginPath();
+  for (let x = cx - hw - cell + off; x < cx + hw; x += cell) { ctx.moveTo(x, cy - hh); ctx.lineTo(x, cy + hh); }
+  for (let y = cy - hh - cell + off; y < cy + hh; y += cell) { ctx.moveTo(cx - hw, y); ctx.lineTo(cx + hw, y); }
+  ctx.stroke();
+  if (FLOOR.dash) ctx.setLineDash([]);
+  const sy = cy - hh + ((t * 40) % (hh * 2));
+  const sg = ctx.createLinearGradient(0, sy - 40, 0, sy + 40);
+  sg.addColorStop(0, `rgba(${theme.accent},0)`);
+  sg.addColorStop(0.5, `rgba(${theme.accent},0.05)`);
+  sg.addColorStop(1, `rgba(${theme.accent},0)`);
+  ctx.fillStyle = sg;
+  ctx.fillRect(cx - hw, sy - 40, hw * 2, 80);
+  ctx.restore();
+
+  // energy cage: layered glow border + marching dashes + corner nodes
+  const pulse = 0.5 + 0.5 * Math.sin(t * (danger ? 6 : 1.6));
+  const col = danger ? theme.danger : theme.accent;
+  ctx.globalCompositeOperation = "lighter";
+  for (const [w, a] of [[14, 0.05 + 0.04 * pulse], [6, 0.12 + 0.06 * pulse], [2.5, 0.75]]) {
+    cagePath();
+    ctx.strokeStyle = `rgba(${col},${a})`;
+    ctx.lineWidth = w;
+    ctx.stroke();
+  }
+  cagePath(9);
+  ctx.setLineDash([14, 22]);
+  ctx.lineDashOffset = -t * (danger ? 160 : 45);
+  ctx.strokeStyle = `rgba(${col},0.5)`;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.setLineDash([]);
+  for (const [sx, sy2] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    const nx = cx + sx * (hw - arena.rr * 0.3), ny = cy + sy2 * (hh - arena.rr * 0.3);
+    if (theme.cornerGlyph) {
+      // themed corner marker (torch / frost / leaf / spark) instead of a bare tech node
+      ctx.save();
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = `${Math.round(minDim * 0.032 * (0.9 + 0.15 * pulse))}px system-ui, sans-serif`;
+      ctx.globalAlpha = 0.85 + 0.15 * pulse;
+      ctx.fillText(theme.cornerGlyph, nx, ny + Math.sin(t * 2 + sx + sy2) * 3);
+      ctx.restore();
+      continue;
+    }
+    ctx.beginPath();
+    ctx.arc(nx, ny, 4 + 2 * pulse, 0, TAU);
+    ctx.fillStyle = `rgba(${col},0.9)`;
+    ctx.fill();
+    // orbiting spark — a small satellite ring tracing each node
+    const orbitR = 9 + pulse * 2;
+    const oa = t * (danger ? 3.2 : 1.1) + sx * 1.7 + sy2 * 0.9;
+    ctx.beginPath();
+    ctx.arc(nx + Math.cos(oa) * orbitR, ny + Math.sin(oa) * orbitR, 1.6, 0, TAU);
+    ctx.fillStyle = `rgba(${col},0.7)`;
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+
+// foreground framing per theme mood — makes each arena feel like a distinct place, not just a recolor
+function drawThemeDecor(t) {
+  if (theme.mood === "jungle") {
+    for (const v of decor) {
+      const sway = Math.sin(t * 0.7 + v.phase) * v.sway;
+      const y0 = v.fromTop ? -20 : H + 20;
+      const y1 = v.fromTop ? v.len : H - v.len;
+      const g = ctx.createLinearGradient(v.x, y0, v.x, y1);
+      g.addColorStop(0, `rgba(${theme.accent},0.5)`);
+      g.addColorStop(1, `rgba(${theme.accent},0)`);
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(v.x, y0);
+      ctx.quadraticCurveTo(v.x + sway, (y0 + y1) / 2, v.x + sway * 0.4, y1);
+      ctx.stroke();
+      ctx.save();
+      ctx.font = `${Math.round(minDim * 0.03)}px system-ui, sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.globalAlpha = 0.75;
+      ctx.fillText(v.leaf, v.x + sway * 0.4, y1 + (v.fromTop ? 8 : -8));
+      ctx.restore();
+    }
+  } else if (theme.mood === "arena") {
+    for (const p of decor) {
+      const flick = 0.6 + 0.4 * Math.sin(t * 9 + p.phase) * Math.random() * 0.3 + 0.4 * Math.sin(t * 4 + p.phase);
+      const x = p.edge === 0 ? 26 : W - 26;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const g = ctx.createRadialGradient(x, p.y, 0, x, p.y, 46);
+      g.addColorStop(0, `rgba(${theme.danger},${0.35 * clamp(flick, 0.2, 1)})`);
+      g.addColorStop(1, `rgba(${theme.danger},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, p.y, 46, 0, TAU); ctx.fill();
+      ctx.restore();
+      ctx.font = `${Math.round(minDim * 0.026)}px system-ui, sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("🔥", x, p.y);
+    }
+  } else if (theme.mood === "ice") {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const b of decor) {
+      const yy = H * 0.06 + b.band * 22 + Math.sin(t * 0.15 + b.phase) * b.amp;
+      const g = ctx.createLinearGradient(0, yy - 30, 0, yy + 30);
+      g.addColorStop(0, `rgba(${theme.accent},0)`);
+      g.addColorStop(0.5, `rgba(${theme.accent},0.06)`);
+      g.addColorStop(1, `rgba(${theme.accent},0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, yy - 30, W, 60);
+    }
+    ctx.restore();
+  } else if (theme.mood === "cyber") {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = `rgba(${theme.accent},${0.5 + 0.3 * Math.sin(t * 3)})`;
+    ctx.lineWidth = 2;
+    for (const c of decor) {
+      const cx0 = c.corner % 2 === 0 ? 0 : W, cy0 = c.corner < 2 ? 0 : H;
+      const sx = c.corner % 2 === 0 ? 1 : -1, sy = c.corner < 2 ? 1 : -1;
+      const reach = c.len * (0.6 + 0.4 * Math.sin(t * 1.4 + c.phase));
+      ctx.beginPath();
+      ctx.moveTo(cx0, cy0 + sy * 20);
+      ctx.lineTo(cx0 + sx * reach, cy0 + sy * 20);
+      ctx.moveTo(cx0 + sx * 20, cy0);
+      ctx.lineTo(cx0 + sx * 20, cy0 + sy * reach);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+// power-ups: pulsing glow discs with a glyph
+function drawPickups(now, t) {
+  for (const g of state.pickups) {
+    const def = PICKUPS[g.kind];
+    const age = Math.max(0, now - g.born) / 1000;
+    const left = 14 - age;
+    const pop = Math.min(1, age * 4);                       // spawn pop-in
+    const blink = left < 3 ? (Math.sin(t * 10) > 0 ? 1 : 0.25) : 1;  // about to expire
+    const R = minDim * 0.015 * pop * (1 + 0.12 * Math.sin(t * 3 + g.id));
+    ctx.globalAlpha = blink;
+    const gr = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, R * 2.6);
+    gr.addColorStop(0, def.color + "55");
+    gr.addColorStop(1, def.color + "00");
+    ctx.fillStyle = gr;
+    ctx.beginPath(); ctx.arc(g.x, g.y, R * 2.6, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(g.x, g.y, R * 1.4, 0, TAU);
+    ctx.strokeStyle = def.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.font = `${Math.round(R * 1.6)}px system-ui, sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(def.glyph, g.x, g.y + R * 0.08);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// trails: additive neon ribbons that fade toward the tail, white-hot near the head
+function drawTrails(now) {
+  const tw = trailW();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const lobby = state.phase === "lobby" || state.phase === "countdown";
+  const BUCKETS = 8;
+  for (const p of state.players.values()) {
+    const tr = p.trail;
+    if (tr.length < 2) continue;
+    const deadDim = p.alive ? 1 : 0.4;
+    for (let b = 0; b < BUCKETS; b++) {
+      const i0 = Math.floor(tr.length * b / BUCKETS);
+      const i1 = Math.min(tr.length - 1, Math.floor(tr.length * (b + 1) / BUCKETS));
+      if (i1 <= i0) continue;
+      const fade = (b + 1) / BUCKETS;                 // tail → head
+      const trace = () => {
+        ctx.beginPath();
+        let pen = false;
+        for (let i = i0; i <= i1; i++) {
+          if (tr[i][2]) { pen = false; continue; }
+          if (!pen) { ctx.moveTo(tr[i][0], tr[i][1]); pen = true; }
+          else ctx.lineTo(tr[i][0], tr[i][1]);
+        }
+      };
+      // body tapers: thin at the tail, full girth at the head
+      const bw = tw * (0.35 + 0.85 * fade);
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = bw * 2.6;
+      ctx.globalAlpha = (lobby ? 0.05 : 0.09) * fade * deadDim;
+      trace(); ctx.stroke();
+      // dark outline under the body — makes the snake read as a solid creature
+      ctx.strokeStyle = "rgba(6,9,16,0.85)";
+      ctx.lineWidth = bw * 1.4;
+      ctx.globalAlpha = (lobby ? 0.35 : 0.3 + 0.5 * fade) * deadDim;
+      trace(); ctx.stroke();
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = bw;
+      ctx.globalAlpha = (lobby ? 0.5 : 0.5 + 0.45 * fade) * deadDim;
+      trace(); ctx.stroke();
+    }
+
+    // species markings — bold, high-contrast, sized to the full body width so each snake type
+    // is recognizable at a glance even from across the room
+    const pattern = p.style?.pattern || "bands";
+    if (pattern !== "plain" && tr.length > 6) {
+      const dark = "rgba(5,8,14,0.95)";
+      const light = "rgba(255,255,255,0.85)";
+      ctx.lineCap = "butt";
+      const step = Math.max(2, Math.round((tw * 2.2) / POINT_GAP));
+      let k = 0;
+      for (let i = step; i < tr.length - 1; i += step, k++) {
+        if (tr[i][2] || tr[i - 1][2] || tr[i + 1][2]) continue;
+        const fade = i / tr.length;
+        const w = tw * (0.35 + 0.85 * fade);
+        const dx = tr[i + 1][0] - tr[i - 1][0], dy = tr[i + 1][1] - tr[i - 1][1];
+        const L = Math.hypot(dx, dy) || 1;
+        const tx = dx / L, ty = dy / L, nx = -ty, ny = tx;
+        const x = tr[i][0], y = tr[i][1];
+        ctx.globalAlpha = (lobby ? 0.45 : 0.85) * (0.35 + 0.65 * fade) * deadDim;
+        ctx.fillStyle = dark;
+        ctx.strokeStyle = dark;
+        if (pattern === "bands") {
+          // alternating thick dark / thin light bands, boa-style
+          const isLight = k % 3 === 2;
+          ctx.strokeStyle = isLight ? light : dark;
+          ctx.lineWidth = Math.max(1.5, w * (isLight ? 0.45 : 0.9));
+          ctx.beginPath();
+          ctx.moveTo(x - nx * w, y - ny * w);
+          ctx.lineTo(x + nx * w, y + ny * w);
+          ctx.stroke();
+        } else if (pattern === "rings") {
+          // anaconda: full-width dark ring with a light core
+          ctx.lineWidth = Math.max(1.5, w * 0.4);
+          for (const [o, c] of [[-0.5, dark], [0.5, dark], [0, light]]) {
+            ctx.strokeStyle = c;
+            ctx.beginPath();
+            ctx.moveTo(x + tx * w * o - nx * w, y + ty * w * o - ny * w);
+            ctx.lineTo(x + tx * w * o + nx * w, y + ty * w * o + ny * w);
+            ctx.stroke();
+          }
+        } else if (pattern === "diamonds") {
+          // rattlesnake: fat diamonds spanning the whole back
+          ctx.beginPath();
+          ctx.moveTo(x + tx * w * 1.1, y + ty * w * 1.1);
+          ctx.lineTo(x + nx * w * 0.8, y + ny * w * 0.8);
+          ctx.lineTo(x - tx * w * 1.1, y - ty * w * 1.1);
+          ctx.lineTo(x - nx * w * 0.8, y - ny * w * 0.8);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = light;
+          ctx.beginPath();
+          ctx.arc(x, y, Math.max(1, w * 0.2), 0, TAU);
+          ctx.fill();
+        } else if (pattern === "blotches") {
+          // python: big saddle blotches alternating sides
+          const side = k % 2 ? 0.35 : -0.35;
+          ctx.beginPath();
+          ctx.ellipse(x + nx * w * side, y + ny * w * side, w * 1.05, w * 0.65, Math.atan2(ty, tx), 0, TAU);
+          ctx.fill();
+        } else if (pattern === "chevrons") {
+          // cobra: bold V-marks pointing tailward
+          ctx.lineWidth = Math.max(1.5, w * 0.5);
+          ctx.beginPath();
+          ctx.moveTo(x + tx * w + nx * w * 0.95, y + ty * w + ny * w * 0.95);
+          ctx.lineTo(x - tx * w * 0.7, y - ty * w * 0.7);
+          ctx.lineTo(x + tx * w - nx * w * 0.95, y + ty * w - ny * w * 0.95);
+          ctx.stroke();
+        } else if (pattern === "zigzag") {
+          // viper: continuous lightning stripe swinging edge to edge
+          const s1 = k % 2 ? 1 : -1;
+          ctx.lineWidth = Math.max(1.5, w * 0.55);
+          ctx.beginPath();
+          ctx.moveTo(x - tx * w * 1.1 + nx * s1 * w * 0.75, y - ty * w * 1.1 + ny * s1 * w * 0.75);
+          ctx.lineTo(x + tx * w * 1.1 - nx * s1 * w * 0.75, y + ty * w * 1.1 - ny * s1 * w * 0.75);
+          ctx.stroke();
+        } else if (pattern === "speckle") {
+          // taipan: dense scatter of dark + light flecks
+          for (const [off, c] of [[0.55, dark], [-0.45, dark], [0.05, light]]) {
+            const j = Math.sin(i * 12.9898 + off * 78.233 + p.id) * 43758.5453;
+            const jit = (j - Math.floor(j)) - 0.5;
+            ctx.fillStyle = c;
+            ctx.beginPath();
+            ctx.arc(x + nx * (off + jit * 0.5) * w, y + ny * (off + jit * 0.5) * w, Math.max(1, w * 0.24), 0, TAU);
+            ctx.fill();
+          }
+        }
+      }
+      ctx.lineCap = "round";
+    }
+
+    // glossy sheen travelling tail→head — smooth muscle-in-motion feel
+    if (p.alive && !lobby && tr.length > 14) {
+      const span = Math.max(8, (tr.length * 0.1) | 0);
+      const pos = ((now / 1000 * 0.45 + p.id * 0.19) % 1) * (tr.length - span);
+      const j0 = pos | 0;
+      ctx.beginPath();
+      let pen = false;
+      for (let i = j0; i < j0 + span; i++) {
+        if (tr[i][2]) { pen = false; continue; }
+        if (!pen) { ctx.moveTo(tr[i][0], tr[i][1]); pen = true; }
+        else ctx.lineTo(tr[i][0], tr[i][1]);
+      }
+      const fade = j0 / tr.length;
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = Math.max(1, tw * (0.35 + 0.85 * fade) * 0.4);
+      ctx.globalAlpha = 0.22 * deadDim;
+      ctx.stroke();
+    }
+    // white-hot segment right behind the head
+    if (p.alive && tr.length > 3) {
+      const i0 = Math.max(0, tr.length - 7);
+      ctx.beginPath();
+      let pen = false;
+      for (let i = i0; i < tr.length; i++) {
+        if (tr[i][2]) { pen = false; continue; }
+        if (!pen) { ctx.moveTo(tr[i][0], tr[i][1]); pen = true; }
+        else ctx.lineTo(tr[i][0], tr[i][1]);
+      }
+      ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.lineWidth = tw * 0.55;
+      ctx.globalAlpha = lobby ? 0.35 : 0.8;
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// crash shockwaves: two expanding rings + flash
+function drawWaves(now) {
+  state.waves = state.waves.filter(w => now - w.at < 700);
+  for (const w of state.waves) {
+    const k = clamp((now - w.at) / 700, 0, 1);
+    const R = minDim * 0.02 + k * minDim * 0.22;
+    ctx.globalAlpha = (1 - k) * 0.9;
+    ctx.strokeStyle = w.color;
+    ctx.lineWidth = 4 * (1 - k) + 1;
+    ctx.beginPath(); ctx.arc(w.x, w.y, R, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = (1 - k) * 0.5;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(w.x, w.y, R * 0.65, 0, TAU); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// snake heads: proper anatomy — wedge skull, eyes with pupils, flicking forked tongue
+function drawHeads(now, t) {
+  const hr = headR();
+  for (const p of state.players.values()) {
+    if (!p.alive || p.queued) continue;
+    const boosting = now < p.boostUntil;
+    const ghosting = now < p.ghostUntil;
+    const shielded = now < p.shieldUntil;
+    const slowed = now < p.slowUntil;
+
+    if (shielded) {                    // 🛡️ solid glowing ring
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, hr * 2.6 + Math.sin(t * 5) * 1.5, 0, TAU);
+      ctx.strokeStyle = "#4ade80";
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = 0.85;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    if (slowed) {                      // ❄️ icy crystalline sparkle
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, hr * 3.2, 0, TAU);
+      ctx.strokeStyle = "#7dd3fc";
+      ctx.setLineDash([3, 5]);
+      ctx.lineDashOffset = t * 15;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.7;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+    if (ghosting) {                    // 👻 shimmering dashed aura
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, hr * 3.8 + Math.sin(t * 8) * 2, 0, TAU);
+      ctx.setLineDash([6, 7]);
+      ctx.lineDashOffset = -t * 40;
+      ctx.strokeStyle = "rgba(167,139,250,0.9)";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    // warp streak: a stretched motion-blur wedge trailing the head while boosting
+    if (boosting) {
+      const nx = Math.cos(p.dir), ny = Math.sin(p.dir);
+      const len = hr * 7;
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      const streak = ctx.createLinearGradient(p.x, p.y, p.x - nx * len, p.y - ny * len);
+      streak.addColorStop(0, p.color);
+      streak.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.strokeStyle = streak;
+      ctx.lineWidth = hr * 1.1;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - nx * len, p.y - ny * len);
+      ctx.stroke();
+      ctx.restore();
+    }
+    // ambient glow around the head
+    for (const [mul, a] of [[4.6, 0.10], [2.6, 0.22]]) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, hr * mul * (boosting ? 1.5 : 1), 0, TAU);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = a;
+      ctx.fill();
+    }
+    ctx.globalAlpha = ghosting ? 0.65 : 1;
+
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.dir);
+    const s = hr;                      // head scale unit
+    // cobra hood: a flared mantle behind the skull, breathing slightly
+    if (p.style?.hood) {
+      const flare = 1 + 0.07 * Math.sin(t * 2.6 + p.id);
+      ctx.beginPath();
+      ctx.ellipse(-s * 0.7, 0, s * 2.1, s * 2.7 * flare, 0, 0, TAU);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(-s * 0.7, 0, s * 1.25, s * 1.7 * flare, 0, 0, TAU);
+      ctx.fillStyle = "rgba(10,13,26,0.4)";
+      ctx.fill();
+    }
+    // skull: rounded wedge, wider than the body, tapering to the snout
+    ctx.beginPath();
+    ctx.moveTo(s * 2.6, 0);                                    // snout tip
+    ctx.quadraticCurveTo(s * 2.3, s * 1.1, s * 0.6, s * 1.35); // right jaw
+    ctx.quadraticCurveTo(-s * 1.4, s * 1.25, -s * 1.6, 0);     // right rear
+    ctx.quadraticCurveTo(-s * 1.4, -s * 1.25, s * 0.6, -s * 1.35);
+    ctx.quadraticCurveTo(s * 2.3, -s * 1.1, s * 2.6, 0);
+    ctx.closePath();
+    ctx.fillStyle = p.color;
+    ctx.fill();
+    // lighter top plate for depth
+    ctx.beginPath();
+    ctx.moveTo(s * 2.1, 0);
+    ctx.quadraticCurveTo(s * 1.6, s * 0.65, -s * 0.6, s * 0.7);
+    ctx.quadraticCurveTo(-s * 1.1, 0, -s * 0.6, -s * 0.7);
+    ctx.quadraticCurveTo(s * 1.6, -s * 0.65, s * 2.1, 0);
+    ctx.fillStyle = "rgba(255,255,255,0.28)";
+    ctx.fill();
+    // eyes: amber with slit pupils
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(s * 1.1, side * s * 0.72, s * 0.42, 0, TAU);
+      ctx.fillStyle = "#ffd76e";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(s * 1.18, side * s * 0.72, s * 0.10, s * 0.30, 0, 0, TAU);
+      ctx.fillStyle = "#101420";
+      ctx.fill();
+    }
+    // forked tongue: flicks out rhythmically
+    const flickT = (t * 2.2 + p.id * 1.3) % 1;
+    if (flickT < 0.3) {
+      const out = Math.sin(flickT / 0.3 * Math.PI) * s * 1.7;
+      const wig = Math.sin(t * 30) * s * 0.18;
+      ctx.strokeStyle = "#e8556e";
+      ctx.lineWidth = Math.max(1.5, s * 0.16);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(s * 2.5, 0);
+      ctx.lineTo(s * 2.5 + out * 0.7, wig);
+      ctx.lineTo(s * 2.5 + out, wig + s * 0.35);
+      ctx.moveTo(s * 2.5 + out * 0.7, wig);
+      ctx.lineTo(s * 2.5 + out, wig - s * 0.35);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+
+    // rattlesnake: a buzzing rattle at the tail tip
+    if (p.style?.rattle && p.trail.length > 6) {
+      const a = p.trail[0], b2 = p.trail[4];
+      if (!a[2] && !b2[2]) {
+        const dx = a[0] - b2[0], dy = a[1] - b2[1];
+        const L = Math.hypot(dx, dy) || 1;
+        const ux = dx / L, uy = dy / L, vx = -uy, vy = ux;
+        const tw2 = trailW();
+        const buzz = Math.sin(t * (boosting ? 55 : 22) + p.id) * tw2 * 0.3;
+        ctx.fillStyle = "rgba(224,204,150,0.9)";
+        for (let k = 0; k < 3; k++) {
+          const wob = buzz * (k + 1) / 3;
+          ctx.beginPath();
+          ctx.arc(a[0] + ux * tw2 * (0.9 + k * 1.05) + vx * wob,
+                  a[1] + uy * tw2 * (0.9 + k * 1.05) + vy * wob,
+                  Math.max(1.2, tw2 * (0.5 - k * 0.1)), 0, TAU);
+          ctx.fill();
+        }
+      }
+    }
+
+    // speed sparks behind the tailward side of the head while boosting
+    const nx = Math.cos(p.dir), ny = Math.sin(p.dir);
+    if (Math.random() < (boosting ? 0.9 : 0.15)) {
+      state.particles.push({
+        x: p.x - nx * hr * 2, y: p.y - ny * hr * 2,
+        vx: -nx * 90 + (Math.random() - 0.5) * 60,
+        vy: -ny * 90 + (Math.random() - 0.5) * 60,
+        life: 0.3 + Math.random() * 0.25, maxLife: 0.55,
+        color: boosting ? "#ffffff" : p.color,
+        size: 1.5 + Math.random() * 2, grav: 0,
+      });
+    }
+  }
+}
+
+function drawNames(now) {
+  const hr = headR();
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = `600 ${Math.round(minDim * 0.021)}px system-ui, sans-serif`;
+  for (const p of state.players.values()) {
+    if (!p.alive || p.queued) continue;
+    const label = state.phase === "lobby" && p.ready ? `${p.name} ✓` : p.name;
+    ctx.fillStyle = "rgba(10,13,26,0.6)";
+    ctx.fillText(label, p.x + 1, p.y - hr * 3.4 + 1);
+    ctx.fillStyle = state.phase === "lobby" && p.ready ? p.color : "rgba(240,243,252,0.92)";
+    ctx.fillText(label, p.x, p.y - hr * 3.4);
+  }
+}
+
+// snappy overshoot pop-in: 0ms = tiny, ~380ms = settles at 1.0 with a slight bounce
+function popScale(elapsedMs, dur = 380) {
+  if (elapsedMs >= dur) return 1;
+  if (elapsedMs <= 0) return 0.4;
+  const x = elapsedMs / dur, c1 = 1.70158, c3 = c1 + 1;
+  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+}
+function popText(text, x, y, elapsedMs, dur = 380) {
+  const s = popScale(elapsedMs, dur);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+function drawOverlay(now) {
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+
+  if (state.phase === "lobby") {
+    ctx.font = `650 ${Math.round(H * 0.05)}px system-ui, sans-serif`;
+    ctx.fillStyle = "rgba(232,235,245,0.9)";
+    ctx.fillText("Snake Royale", W / 2, H * 0.07);
+    const n = state.players.size;
+    ctx.font = `400 ${Math.round(H * 0.024)}px system-ui, sans-serif`;
+    ctx.fillStyle = C.dim;
+    ctx.fillText(
+      n === 0 ? "Scan the QR code to join →" :
+      n === 1 ? "Warm up! Need one more player — scan to join →" :
+      "Warm up, then everyone tap Ready to start", W / 2, H * 0.95);
+  } else if (state.phase === "countdown") {
+    const n = Math.ceil((state.countdownEnd - now) / 1000);
+    ctx.font = `250 ${Math.round(H * 0.22)}px system-ui, sans-serif`;
+    ctx.fillStyle = C.text;
+    popText(Math.max(n, 1), W / 2, H / 2, now - state.cdPopAt);
+  } else if (state.phase === "roundend") {
+    const pop = now - (state.roundEndAt - 3000);
+    ctx.font = `600 ${Math.round(H * 0.06)}px system-ui, sans-serif`;
+    if (state.roundWinner) {
+      ctx.fillStyle = state.roundWinner.color;
+      popText(`${state.roundWinner.name} survives the round!`, W / 2, H * 0.45, pop);
+    } else {
+      ctx.fillStyle = C.dim;
+      popText("Everyone crashed!", W / 2, H * 0.45, pop);
+    }
+  } else if (state.phase === "matchend" && state.matchWinner) {
+    const pop = now - (state.matchEndAt - 6000);
+    ctx.font = `650 ${Math.round(H * 0.08)}px system-ui, sans-serif`;
+    ctx.fillStyle = state.matchWinner.color;
+    popText(`🏆 ${state.matchWinner.name} wins!`, W / 2, H * 0.44, pop);
+    ctx.font = `400 ${Math.round(H * 0.024)}px system-ui, sans-serif`;
+    ctx.fillStyle = C.dim;
+    ctx.fillText("Back to the lobby in a moment…", W / 2, H * 0.53);
+  } else if (state.phase === "play") {
+    const t = (now - state.roundStart) / 1000;
+    const untilShrink = SHRINK_AFTER_S - t;
+    ctx.font = `400 ${Math.round(H * 0.02)}px system-ui, sans-serif`;
+    ctx.fillStyle = untilShrink <= 0 ? `rgba(${theme.danger},0.8)` : "rgba(154,163,189,0.5)";
+    ctx.fillText(
+      untilShrink > 0 ? `Walls close in ${Math.ceil(untilShrink)}s · 💎 +1 point · ⚡ turbo · 👻 pass through trails` : "⚠ Walls closing in!",
+      W / 2, H * 0.965);
+  }
+
+  // kill feed, top-left
+  ctx.textAlign = "left";
+  ctx.font = `600 ${Math.round(H * 0.022)}px system-ui, sans-serif`;
+  let y = H * 0.06;
+  for (const f of state.feed) {
+    const age = (now - f.at) / 1000;
+    if (age > 5) continue;
+    ctx.globalAlpha = clamp(1 - (age - 4), 0, 1);
+    ctx.fillStyle = f.color;
+    ctx.fillText(`💥 ${f.text}`, 24, y);
+    y += H * 0.035;
+  }
+  ctx.globalAlpha = 1;
+}
+
+// demo mode (?demo=1): three local AI snakes play by themselves — attract screen / testing
+const demo = new URLSearchParams(location.search).has("demo");
+if (demo) {
+  ["Ava", "Rex", "Kai"].forEach((name, i) => {
+    const p = makePlayer(9001 + i, name);
+    spawnInRing(p, performance.now());
+    p.ready = true;
+    state.players.set(p.id, p);
+  });
+  // jump straight into a round and pre-simulate ~12s so the first frame shows action
+  fitArena();
+  startCountdown(0);
+  startRound(0);
+  let simNow = 0;
+  for (let i = 0; i < 750 && state.phase === "play"; i++) {
+    simNow += 16;
+    demoSteer(simNow);
+    physics(simNow, 0.016);
+  }
+  // rebase sim timestamps onto the real clock
+  const shift = performance.now() - simNow;
+  state.roundStart += shift;
+  state.roundEndAt += shift;
+  nextPickupAt += shift;
+  for (const w of state.waves) w.at += shift;
+  for (const f of state.feed) f.at += shift;
+  for (const g of state.pickups) g.born += shift;
+  for (const p of state.players.values()) {
+    p.boostUntil += shift; p.boostAt += shift;
+    p.gapUntil += shift; p.nextGapAt += shift; p.ghostUntil += shift;
+    p.shieldUntil += shift; p.slowUntil += shift;
+  }
+}
+function demoSteer(now) {
+  for (const p of state.players.values()) {
+    if (!p.alive || p.id < 9000) continue;
+    // steer away from walls, otherwise wander
+    const ahead = wallDepth(p.x + Math.cos(p.dir) * minDim * 0.12, p.y + Math.sin(p.dir) * minDim * 0.12);
+    let a;
+    if (ahead > -headR() * 4) a = Math.atan2(arena.cy - p.y, arena.cx - p.x);
+    else a = p.dir + Math.sin(now / 900 + p.id * 2.1) * 0.9;
+    p.inx = Math.cos(a); p.iny = Math.sin(a);
+    if (Math.random() < 0.003) doBoost(p);
+  }
+}
+
+fitArena();
+connect();
+renderSide();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

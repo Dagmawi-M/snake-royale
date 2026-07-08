@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Snake Royale Controller</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%; overflow: hidden;
+    background:
+      radial-gradient(120% 90% at 20% -10%, rgba(94,200,176,0.10), transparent 55%),
+      radial-gradient(120% 90% at 90% 110%, rgba(122,140,232,0.10), transparent 55%),
+      #0c101c;
+    font-family: -apple-system, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; color: #e8ebf5;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+    overscroll-behavior: none;
+  }
+  body { height: 100dvh; }
+  button { font-family: inherit; }
+
+  /* ---- join screen ---- */
+  #join {
+    height: 100%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: clamp(14px, 3vh, 24px); padding: 24px;
+  }
+  #join h1 { font-size: clamp(26px, 8vw, 36px); font-weight: 750; letter-spacing: -0.01em; }
+  #join h1::before { content: "🐍 "; }
+  #join p { color: #9aa3bd; font-size: 14.5px; text-align: center; }
+  #name {
+    width: min(340px, 86vw); padding: 15px 18px; font-size: 18px;
+    background: rgba(232,235,245,0.06); color: #e8ebf5;
+    border: 2px solid rgba(232,235,245,0.16); border-radius: 14px;
+    outline: none; text-align: center;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  #name:focus { border-color: #5ec8b0; box-shadow: 0 0 0 4px rgba(94,200,176,0.15); }
+  #joinBtn {
+    width: min(340px, 86vw); padding: 17px; font-size: 18px; font-weight: 700;
+    letter-spacing: 0.02em; color: #0c101c; border: none; border-radius: 14px;
+    background: linear-gradient(180deg, #6fd8c0, #4eb8a0);
+    box-shadow: 0 6px 18px rgba(94,200,176,0.35), inset 0 1px 0 rgba(255,255,255,0.35);
+    transition: transform 0.1s, box-shadow 0.15s;
+  }
+  #joinBtn:active { transform: scale(0.97); box-shadow: 0 3px 10px rgba(94,200,176,0.3); }
+  #species {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+    width: min(360px, 90vw);
+  }
+  .spBtn {
+    display: flex; align-items: center; gap: 7px;
+    padding: 9px 13px; font-size: 13px; font-weight: 600; color: #e8ebf5;
+    background: rgba(232,235,245,0.06); border: 2px solid rgba(232,235,245,0.13); border-radius: 22px;
+    transition: border-color 0.12s, background 0.12s, transform 0.1s;
+  }
+  .spBtn .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 6px var(--sc); }
+  .spBtn.active { border-color: var(--sc); background: color-mix(in srgb, var(--sc) 22%, transparent); }
+  .spBtn:active { transform: scale(0.94); }
+
+  /* ---- controller screen ---- */
+  #pad { height: 100%; display: none; flex-direction: column; }
+  #main { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  #actions { display: flex; flex-direction: column; }
+  #emojis {
+    display: flex; justify-content: center; gap: 8px;
+    padding: 6px 12px 0; flex-wrap: wrap;
+  }
+  .emo {
+    width: clamp(42px, 11vw, 48px); height: clamp(42px, 11vw, 48px);
+    font-size: 24px; border-radius: 13px;
+    background: rgba(232,235,245,0.06); border: 1.5px solid rgba(232,235,245,0.13);
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  .emo:active { transform: scale(0.88); }
+  .emo.cool { opacity: 0.3; }
+  #toast {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    padding: 8px 16px; border-radius: 20px; white-space: nowrap;
+    background: rgba(14,18,32,0.85); border: 1.5px solid rgba(232,235,245,0.2);
+    font-size: 17px; font-weight: 600; display: none; pointer-events: none;
+  }
+
+  /* sideways: joystick fills the left, actions stack on the right */
+  @media (orientation: landscape) {
+    #pad { flex-direction: row; }
+    #topbar { padding: 10px 14px; }
+    #status { font-size: 16px; min-height: 26px; padding: 2px 10px; }
+    #actions {
+      width: 132px; flex-shrink: 0; justify-content: flex-end; gap: 12px;
+      padding: 10px calc(10px + env(safe-area-inset-right)) 14px 0;
+    }
+    #emojis { display: grid; grid-template-columns: repeat(2, 46px); justify-content: center; gap: 7px; padding: 0; }
+    #bottombar { flex-direction: column; gap: 12px; padding: 0; align-items: center; }
+    #readyBtn { padding: 12px 18px; font-size: 16px; }
+    #boostWrap { width: 92px; height: 92px; }
+    #boostRing { inset: -8px; width: 108px; height: 108px; }
+    #boostBtn { width: 92px; height: 92px; }
+    #mini { top: 6px; width: min(34vw, 240px); height: min(25.5vw, 180px); }
+  }
+  #topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: calc(12px + env(safe-area-inset-top)) 18px 10px;
+    border-bottom: 1px solid rgba(232,235,245,0.07);
+  }
+  #swatch {
+    width: 26px; height: 26px; border-radius: 50%; background: #5ec8b0; box-shadow: 0 0 12px currentColor;
+    border: 2px solid rgba(255,255,255,0.35); padding: 0; flex-shrink: 0;
+    transition: transform 0.1s;
+  }
+  #swatch:active { transform: scale(0.88); }
+
+  /* ---- species overlay: change snake type anytime from the pad screen ---- */
+  #speciesOverlay {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(9,11,20,0.92); backdrop-filter: blur(4px);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+    padding: 24px;
+  }
+  #speciesOverlay h2 { font-size: 20px; font-weight: 650; }
+  #speciesPanel2 { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 360px; }
+  #speciesClose {
+    width: min(320px, 80vw); padding: 16px; font-size: 17px; font-weight: 600;
+    background: #5ec8b0; color: #0e1220; border: none; border-radius: 14px;
+  }
+  #speciesClose:active { transform: scale(0.97); }
+  #pname { font-size: 17px; font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #conn {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.05em; color: #9aa3bd;
+    padding: 4px 10px; border-radius: 20px;
+    background: rgba(232,235,245,0.06); border: 1px solid rgba(232,235,245,0.1);
+  }
+  #status {
+    text-align: center; font-size: clamp(15px, 4.6vw, 19px); font-weight: 600; color: #9aa3bd;
+    padding: 8px 16px; min-height: 36px; transition: color 0.2s;
+  }
+  #zone { flex: 1; position: relative; }
+  /* short landscape phones: reclaim vertical space */
+  @media (max-height: 420px) {
+    #topbar { padding-top: calc(6px + env(safe-area-inset-top)); padding-bottom: 6px; }
+    #status { min-height: 26px; padding: 4px 12px; font-size: 14px; }
+  }
+  #mini {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    width: min(64vw, 260px); height: min(48vw, 195px);
+    pointer-events: none; display: none;
+  }
+  #miniBtn {
+    position: absolute; top: 10px; right: 12px; z-index: 2;
+    width: 42px; height: 42px; border-radius: 50%;
+    background: rgba(232,235,245,0.07); color: #9aa3bd;
+    border: 1.5px solid rgba(232,235,245,0.2); font-size: 18px;
+  }
+  #miniBtn.on { color: #5ec8b0; border-color: rgba(94,200,176,0.5); }
+  #stickBase, #stickKnob {
+    position: absolute; border-radius: 50%; pointer-events: none;
+    transform: translate(-50%, -50%); display: none;
+  }
+  #stickBase {
+    width: 150px; height: 150px; border: 2px solid rgba(232,235,245,0.22);
+    background: radial-gradient(circle, rgba(232,235,245,0.04), rgba(232,235,245,0.01));
+  }
+  #stickKnob {
+    width: 64px; height: 64px;
+    background: radial-gradient(circle at 38% 32%, #ffffff, #c9d0e2);
+    box-shadow: 0 0 20px rgba(232,235,245,0.45), 0 3px 8px rgba(0,0,0,0.4);
+  }
+  #hint {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: rgba(154,163,189,0.55); font-size: 15px; font-weight: 500; pointer-events: none;
+  }
+  #hint::before { content: "👆 "; margin-right: 6px; }
+
+  #bottombar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 26px calc(26px + env(safe-area-inset-bottom));
+  }
+  #readyBtn {
+    padding: 16px 30px; font-size: 17px; font-weight: 700; letter-spacing: 0.02em;
+    background: rgba(232,235,245,0.08); color: #e8ebf5;
+    border: 2px solid rgba(232,235,245,0.25); border-radius: 14px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+  }
+  #readyBtn:active { transform: scale(0.96); }
+  #readyBtn.on {
+    background: linear-gradient(180deg, #6fd8c0, #4eb8a0);
+    border-color: transparent; color: #0c101c;
+    box-shadow: 0 4px 14px rgba(94,200,176,0.35);
+  }
+  #boostWrap { position: relative; width: 108px; height: 108px; }
+  #boostRing { position: absolute; inset: -8px; width: 124px; height: 124px; pointer-events: none; }
+  #boostBtn {
+    position: absolute; inset: 0; width: 108px; height: 108px; border-radius: 50%;
+    font-size: 16px; font-weight: 800; letter-spacing: 0.06em;
+    background: radial-gradient(circle at 50% 32%, rgba(232,131,110,0.32), rgba(232,131,110,0.12));
+    color: #ff9a82; border: 3px solid #e8836e;
+    box-shadow: 0 4px 16px rgba(232,131,110,0.3), inset 0 1px 0 rgba(255,255,255,0.15);
+    transition: opacity 0.15s, box-shadow 0.15s, transform 0.1s;
+  }
+  #boostBtn:active { transform: scale(0.93); }
+  #boostBtn.cool {
+    opacity: 0.6; color: #9aa3bd; border-color: rgba(232,235,245,0.22);
+    background: rgba(232,235,245,0.05); box-shadow: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="join">
+  <h1>Snake Royale</h1>
+  <p>Steer your light snake — don't touch any trail</p>
+  <input id="name" placeholder="Your name" maxlength="12" autocomplete="off">
+  <div id="species"></div>
+  <button id="joinBtn">Join game</button>
+</div>
+
+<div id="pad">
+  <div id="main">
+    <div id="topbar">
+      <button id="swatch" type="button" title="Change snake type"></button>
+      <div id="pname"></div>
+      <div id="conn">connecting…</div>
+    </div>
+    <div id="status">Waiting…</div>
+    <div id="zone">
+      <button id="miniBtn" class="on">👁</button>
+      <canvas id="mini" width="520" height="390"></canvas>
+      <div id="toast"></div>
+      <div id="hint">Touch and drag anywhere to steer</div>
+      <div id="stickBase"></div>
+      <div id="stickKnob"></div>
+    </div>
+  </div>
+  <div id="actions">
+    <div id="emojis"></div>
+    <div id="bottombar">
+      <button id="readyBtn">Ready</button>
+      <div id="boostWrap">
+        <svg id="boostRing" viewBox="0 0 124 124">
+          <circle cx="62" cy="62" r="56" fill="none" stroke="rgba(232,235,245,0.1)" stroke-width="4"/>
+          <circle id="boostRingFg" cx="62" cy="62" r="56" fill="none" stroke="#e8836e" stroke-width="4"
+                  stroke-linecap="round" transform="rotate(-90 62 62)"/>
+        </svg>
+        <button id="boostBtn">BOOST</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="speciesOverlay" class="hidden">
+  <h2>Choose your snake</h2>
+  <div id="speciesPanel2"></div>
+  <button id="speciesClose">Done</button>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+const joinEl = $("join"), padEl = $("pad");
+const nameEl = $("name"), joinBtn = $("joinBtn");
+const swatch = $("swatch"), pname = $("pname"), conn = $("conn"), status = $("status");
+const zone = $("zone"), base = $("stickBase"), knob = $("stickKnob"), hint = $("hint");
+const readyBtn = $("readyBtn"), boostBtn = $("boostBtn"), boostWrap = $("boostWrap");
+const mini = $("mini"), mctx = mini.getContext("2d");
+
+let ws = null, joined = false, myName = "";
+let ready = false, boostUntil = 0, boostCd = 3000, phase = "lobby";
+let myColor = "#5ec8b0", myId = null, lastViewAt = 0;
+const ghosts = new Map(); // id -> recent head positions, for short trails in the mini view
+
+nameEl.value = localStorage.getItem("snake-name") || "";
+
+// ---- species picker: purely cosmetic — sets your snake's in-game color ----
+const SPECIES = [
+  { key: "cobra",       name: "Cobra",       color: "#5ec8b0" },
+  { key: "python",      name: "Python",      color: "#8de85e" },
+  { key: "viper",       name: "Viper",       color: "#e8836e" },
+  { key: "mamba",       name: "Black Mamba", color: "#7a8ce8" },
+  { key: "anaconda",    name: "Anaconda",    color: "#e8c56e" },
+  { key: "rattlesnake", name: "Rattlesnake", color: "#e85e8f" },
+  { key: "boa",         name: "Boa",         color: "#a78bfa" },
+  { key: "taipan",      name: "Taipan",      color: "#6fb1e8" },
+];
+let mySpecies = localStorage.getItem("snake-species") || "";
+function speciesChipsHtml() {
+  return SPECIES.map(s =>
+    `<button type="button" class="spBtn${s.key === mySpecies ? " active" : ""}" data-key="${s.key}" style="--sc:${s.color}">
+      <span class="dot" style="background:${s.color}"></span>${s.name}
+    </button>`
+  ).join("");
+}
+function refreshSpeciesChips() {
+  document.querySelectorAll(".spBtn").forEach(el => el.classList.toggle("active", el.dataset.key === mySpecies));
+}
+function pickSpecies(key) {
+  mySpecies = mySpecies === key ? "" : key;
+  localStorage.setItem("snake-species", mySpecies);
+  refreshSpeciesChips();
+  if (joined) send({ t: "species", key: mySpecies });
+}
+const speciesEl = $("species");
+speciesEl.innerHTML = speciesChipsHtml();
+speciesEl.addEventListener("click", (e) => {
+  const b = e.target.closest(".spBtn");
+  if (b) pickSpecies(b.dataset.key);
+});
+
+// ---- in-game species overlay: change snake type anytime, mid-lobby or mid-match ----
+const speciesOverlay = $("speciesOverlay"), speciesPanel2 = $("speciesPanel2"), speciesClose = $("speciesClose");
+speciesPanel2.innerHTML = speciesChipsHtml();
+swatch.addEventListener("click", () => {
+  if (!joined) return;
+  speciesPanel2.innerHTML = speciesChipsHtml();
+  speciesOverlay.classList.remove("hidden");
+});
+speciesPanel2.addEventListener("click", (e) => {
+  const b = e.target.closest(".spBtn");
+  if (b) pickSpecies(b.dataset.key);
+});
+speciesClose.addEventListener("click", () => speciesOverlay.classList.add("hidden"));
+
+const vibrate = (p) => { try { navigator.vibrate?.(p); } catch {} };
+
+// ---- connection ----
+function connect() {
+  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`);
+  ws.onopen = () => {
+    conn.textContent = "connected";
+    if (joined) ws.send(JSON.stringify({ t: "hello", role: "ctrl", name: myName, species: mySpecies }));
+  };
+  ws.onclose = () => {
+    conn.textContent = "reconnecting…";
+    setTimeout(connect, 1000);
+  };
+  ws.onmessage = (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.t === "id") {
+      myId = m.id;
+    } else if (m.t === "v") {
+      lastViewAt = performance.now();
+      drawMini(m);
+    } else if (m.t === "you") {
+      myColor = m.color;
+      swatch.style.background = m.color;
+      swatch.style.color = m.color;
+      pname.textContent = m.name;
+    } else if (m.t === "boost") {
+      boostUntil = performance.now() + m.cd;
+      boostCd = m.cd;
+      vibrate(30);
+    } else if (m.t === "fx") {
+      // picked up a power-up: buzz + flash what it was
+      vibrate([40, 40, 40]);
+      const F = {
+        gem: ["💎 +1 point!", "#e8c56e"], turbo: ["⚡ Turbo — boost is free!", "#6fb1e8"],
+        ghost: ["👻 Ghost! Pass through trails", "#a78bfa"], shield: ["🛡️ Shield! Survive the next hit", "#4ade80"],
+        freeze: ["❄️ Froze everyone else!", "#7dd3fc"], frozen: ["❄️ Frozen! Slowed down", "#7dd3fc"],
+        trim: ["✂️ Sheared everyone's trail!", "#f472b6"], warp: ["🌀 Warped!", "#22d3ee"],
+      };
+      const f = F[m.k];
+      if (f) {
+        status.textContent = f[0];
+        status.style.color = f[1];
+        clearTimeout(window._fxT);
+        window._fxT = setTimeout(() => setPhase(phase), 2200);
+      }
+      if (m.k === "turbo") boostUntil = 0;
+    } else if (m.t === "emo") {
+      showToast(`<span style="color:${m.color}">${m.name}</span> <span style="font-size:24px">${m.e}</span>`);
+    } else if (m.t === "st") {
+      setPhase(m.phase);
+    }
+  };
+}
+function send(m) { if (joined && ws?.readyState === 1) ws.send(JSON.stringify(m)); }
+
+function setPhase(p) {
+  phase = p;
+  const S = {
+    lobby:     ["Warm up! Tap Ready when everyone's in", "#9aa3bd"],
+    queued:    ["You'll join the next round", "#e8c56e"],
+    countdown: ["Get ready…", "#e8ebf5"],
+    play:      ["GO! Cut them off — dodge every trail!", myColor],
+    out:       ["Crashed! 💥", "#e8836e"],
+    roundwin:  ["Last snake standing! ⭐", myColor],
+    roundend:  ["Round over — next one soon", "#9aa3bd"],
+    matchwin:  ["🏆 CHAMPION!", myColor],
+    matchend:  ["Match over — back to lobby", "#9aa3bd"],
+  }[p] || [p, "#9aa3bd"];
+  status.textContent = S[0];
+  status.style.color = S[1];
+
+  readyBtn.classList.toggle("hidden", p !== "lobby");
+  boostWrap.classList.toggle("hidden", p === "queued");
+  if (p === "lobby") { ready = false; readyBtn.classList.remove("on"); readyBtn.textContent = "Ready"; }
+  if (p === "countdown" || p === "roundend") { ghosts.clear(); maxW = 0; }
+  if (p === "out") vibrate(200);
+  if (p === "roundwin") vibrate([100, 50, 100]);
+  if (p === "matchwin") vibrate([100, 50, 100, 50, 200]);
+}
+
+// ---- join ----
+joinBtn.addEventListener("click", () => {
+  myName = nameEl.value.trim() || "Player";
+  localStorage.setItem("snake-name", myName);
+  joined = true;
+  joinEl.style.display = "none";
+  padEl.style.display = "flex";
+  if (ws?.readyState === 1) ws.send(JSON.stringify({ t: "hello", role: "ctrl", name: myName, species: mySpecies }));
+  requestWakeLock();
+});
+
+// ---- wake lock: keep the phone screen on ----
+let wakeLock = null;
+async function requestWakeLock() {
+  try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && joined) requestWakeLock();
+});
+
+// ---- joystick (floating: appears where you touch) ----
+const STICK_R = 75;
+let stickId = null, ox = 0, oy = 0;
+let lastSend = 0, curX = 0, curY = 0;
+
+function sendInput(x, y, force) {
+  curX = x; curY = y;
+  const now = performance.now();
+  if (!force && now - lastSend < 33) return;
+  lastSend = now;
+  send({ t: "in", x, y });
+}
+
+zone.addEventListener("pointerdown", (e) => {
+  if (stickId !== null) return;
+  stickId = e.pointerId;
+  zone.setPointerCapture(e.pointerId);
+  ox = e.clientX; oy = e.clientY;
+  base.style.left = ox + "px"; base.style.top = oy + "px";
+  knob.style.left = ox + "px"; knob.style.top = oy + "px";
+  base.style.display = knob.style.display = "block";
+  hint.style.display = "none";
+});
+zone.addEventListener("pointermove", (e) => {
+  if (e.pointerId !== stickId) return;
+  let dx = e.clientX - ox, dy = e.clientY - oy;
+  const d = Math.hypot(dx, dy);
+  if (d > STICK_R) { dx = dx / d * STICK_R; dy = dy / d * STICK_R; }
+  knob.style.left = (ox + dx) + "px";
+  knob.style.top = (oy + dy) + "px";
+  sendInput(dx / STICK_R, dy / STICK_R);
+});
+function stickEnd(e) {
+  if (e.pointerId !== stickId) return;
+  stickId = null;
+  base.style.display = knob.style.display = "none";
+  sendInput(0, 0, true);
+}
+zone.addEventListener("pointerup", stickEnd);
+zone.addEventListener("pointercancel", stickEnd);
+
+// keep host fresh even if the finger holds still
+setInterval(() => { if (stickId !== null) send({ t: "in", x: curX, y: curY }); }, 200);
+
+// ---- boost ----
+boostBtn.addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  if (performance.now() < boostUntil) return;
+  send({ t: "boost" });
+});
+const boostRingFg = $("boostRingFg");
+const RING_C = 2 * Math.PI * 56;
+boostRingFg.style.strokeDasharray = `${RING_C}`;
+(function cooldownLoop() {
+  const left = boostUntil - performance.now();
+  if (left > 0) {
+    boostBtn.classList.add("cool");
+    boostBtn.textContent = (left / 1000).toFixed(1);
+    const frac = clamp01(left / boostCd);
+    boostRingFg.style.strokeDashoffset = `${RING_C * frac}`;
+    boostRingFg.style.opacity = 1;
+  } else {
+    boostBtn.classList.remove("cool");
+    boostBtn.textContent = "BOOST";
+    boostRingFg.style.strokeDashoffset = "0";
+    boostRingFg.style.opacity = 0;
+  }
+  requestAnimationFrame(cooldownLoop);
+})();
+
+// ---- live mini-view of the arena (toggle with the 👁 button) ----
+let miniOn = localStorage.getItem("snake-mini") !== "off";
+const miniBtn = $("miniBtn");
+miniBtn.classList.toggle("on", miniOn);
+miniBtn.addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  miniOn = !miniOn;
+  localStorage.setItem("snake-mini", miniOn ? "on" : "off");
+  miniBtn.classList.toggle("on", miniOn);
+  if (!miniOn) mini.style.display = "none";
+  vibrate(15);
+});
+
+const PICK_GLYPH = { gem: "💎", turbo: "⚡", ghost: "👻", shield: "🛡️", freeze: "❄️", trim: "✂️", warp: "🌀" };
+let maxW = 0;   // widest cage seen this round — to spot the walls closing in
+function drawMini(m) {
+  if (!miniOn) return;
+  mini.style.display = "block";
+  const SW = 520, SH = 390, cx = SW / 2, cy = SH / 2;
+  const scale = (SW / 2 - 14) / 1000;   // arena units (long half-extent = 1000) -> px
+  mctx.clearRect(0, 0, SW, SH);
+
+  maxW = Math.max(maxW, m.w);
+  const danger = m.w < maxW * 0.95;
+  const hw = m.w * scale, hh = m.h * scale;
+
+  // cage: dark glass card with a glowing border
+  mctx.beginPath();
+  mctx.roundRect(cx - hw, cy - hh, hw * 2, hh * 2, 12);
+  const bg = mctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(hw, hh));
+  bg.addColorStop(0, "rgba(20,26,44,0.92)");
+  bg.addColorStop(1, danger ? "rgba(60,24,24,0.94)" : "rgba(14,18,32,0.94)");
+  mctx.fillStyle = bg;
+  mctx.fill();
+  // faint grid
+  mctx.save();
+  mctx.clip();
+  mctx.strokeStyle = "rgba(232,235,245,0.06)";
+  mctx.lineWidth = 1;
+  mctx.beginPath();
+  for (let gx = cx - hw; gx < cx + hw; gx += 46) { mctx.moveTo(gx, cy - hh); mctx.lineTo(gx, cy + hh); }
+  for (let gy = cy - hh; gy < cy + hh; gy += 46) { mctx.moveTo(cx - hw, gy); mctx.lineTo(cx + hw, gy); }
+  mctx.stroke();
+  mctx.restore();
+  mctx.beginPath();
+  mctx.roundRect(cx - hw, cy - hh, hw * 2, hh * 2, 12);
+  mctx.strokeStyle = danger ? "rgba(232,131,110,0.95)" : "rgba(94,200,176,0.75)";
+  mctx.lineWidth = 2.5;
+  mctx.shadowColor = danger ? "#e8836e" : "#5ec8b0";
+  mctx.shadowBlur = 10;
+  mctx.stroke();
+  mctx.shadowBlur = 0;
+
+  // power-ups
+  mctx.font = "17px system-ui, sans-serif";
+  mctx.textAlign = "center"; mctx.textBaseline = "middle";
+  for (const [x, y, kind] of m.g || []) {
+    const px = cx + x * scale, py = cy + y * scale;
+    mctx.beginPath();
+    mctx.arc(px, py, 12, 0, Math.PI * 2);
+    mctx.fillStyle = "rgba(232,235,245,0.09)";
+    mctx.fill();
+    mctx.fillText(PICK_GLYPH[kind] || "?", px, py + 1);
+  }
+
+  // snakes: glowing comet trails, you outlined + labeled
+  const seen = new Set();
+  for (const [id, x, y, color, flags] of m.p) {
+    seen.add(id);
+    const boosting = flags & 1, ghosting = flags & 2, shielded = flags & 4, slowed = flags & 8;
+    const px = cx + x * scale, py = cy + y * scale;
+    let g = ghosts.get(id);
+    if (!g) { g = []; ghosts.set(id, g); }
+    g.push([px, py]);
+    if (g.length > 30) g.shift();
+
+    mctx.lineCap = "round";
+    for (const [w, a] of [[7, 0.18], [3.2, 0.75]]) {
+      mctx.beginPath();
+      for (let i = 0; i < g.length; i++) (i ? mctx.lineTo : mctx.moveTo).call(mctx, g[i][0], g[i][1]);
+      mctx.strokeStyle = color;
+      mctx.globalAlpha = a;
+      mctx.lineWidth = w;
+      mctx.stroke();
+    }
+    mctx.globalAlpha = 1;
+
+    mctx.beginPath();
+    mctx.arc(px, py, 6, 0, Math.PI * 2);
+    mctx.fillStyle = "#fff";
+    mctx.shadowColor = color;
+    mctx.shadowBlur = boosting ? 16 : 8;
+    mctx.fill();
+    mctx.shadowBlur = 0;
+    mctx.beginPath();
+    mctx.arc(px, py, 3.6, 0, Math.PI * 2);
+    mctx.fillStyle = color;
+    mctx.fill();
+    if (ghosting) {
+      mctx.beginPath();
+      mctx.arc(px, py, 9.5, 0, Math.PI * 2);
+      mctx.setLineDash([4, 4]);
+      mctx.strokeStyle = "rgba(167,139,250,0.9)";
+      mctx.lineWidth = 2;
+      mctx.stroke();
+      mctx.setLineDash([]);
+    }
+    if (shielded) {
+      mctx.beginPath();
+      mctx.arc(px, py, 9.5, 0, Math.PI * 2);
+      mctx.strokeStyle = "rgba(74,222,128,0.9)";
+      mctx.lineWidth = 2.5;
+      mctx.stroke();
+    }
+    if (slowed) {
+      mctx.beginPath();
+      mctx.arc(px, py, 9.5, 0, Math.PI * 2);
+      mctx.setLineDash([2, 4]);
+      mctx.strokeStyle = "rgba(125,211,252,0.9)";
+      mctx.lineWidth = 2;
+      mctx.stroke();
+      mctx.setLineDash([]);
+    }
+    if (id === myId) {
+      mctx.beginPath();
+      mctx.arc(px, py, 11, 0, Math.PI * 2);
+      mctx.strokeStyle = "rgba(255,255,255,0.95)";
+      mctx.lineWidth = 2.5;
+      mctx.stroke();
+      mctx.font = "700 11px system-ui, sans-serif";
+      mctx.fillStyle = "rgba(255,255,255,0.95)";
+      mctx.fillText("YOU", px, py - 19);
+      mctx.font = "17px system-ui, sans-serif";
+    }
+  }
+  for (const id of ghosts.keys()) if (!seen.has(id)) ghosts.delete(id);
+}
+setInterval(() => {
+  if (performance.now() - lastViewAt > 2500) mini.style.display = "none";
+}, 1000);
+
+// ---- emoji trash talk ----
+const EMOJIS = ["😂", "😱", "🔥", "💀", "🐍", "👏", "😈", "🫵"];
+const emojisEl = $("emojis");
+let emoCoolUntil = 0;
+for (const e of EMOJIS) {
+  const b = document.createElement("button");
+  b.className = "emo";
+  b.textContent = e;
+  b.addEventListener("pointerdown", (ev) => {
+    ev.stopPropagation();
+    const now = performance.now();
+    if (now < emoCoolUntil) return;
+    emoCoolUntil = now + 1500;
+    send({ t: "emo", e });
+    vibrate(15);
+    for (const btn of emojisEl.children) btn.classList.add("cool");
+    setTimeout(() => { for (const btn of emojisEl.children) btn.classList.remove("cool"); }, 1500);
+  });
+  emojisEl.appendChild(b);
+}
+
+// incoming emotes from anyone → toast over the joystick zone
+const toast = $("toast");
+let toastT = null;
+function showToast(html) {
+  toast.innerHTML = html;
+  toast.style.display = "block";
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { toast.style.display = "none"; }, 2200);
+}
+
+// ---- ready ----
+readyBtn.addEventListener("click", () => {
+  ready = !ready;
+  readyBtn.classList.toggle("on", ready);
+  readyBtn.textContent = ready ? "Ready ✓" : "Ready";
+  send({ t: "ready", v: ready });
+  vibrate(20);
+});
+
+connect();
+</script>
+</body>
+</html>
