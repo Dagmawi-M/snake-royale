@@ -1,6 +1,6 @@
 # Snake Royale
 
-A local party game for a big screen and everyone's phones. One laptop or PC runs the arena on a TV or projector, everyone else joins by scanning a QR code with their phone, and their phone becomes a joystick. Steer your snake, dodge every trail (including your own), grab power-ups, and outlast the pack — last snake standing each round scores points, first to the target score wins the match. No apps to install, no accounts, just the same Wi-Fi.
+A local party game for a big screen and everyone's phones. One laptop or PC runs the arena on a TV or projector, everyone else joins by scanning a QR code with their phone, and their phone becomes a joystick. Steer your snake, dodge every trail (including your own), grab power-ups, and outlast the pack , last snake standing each round scores points, first to the target score wins the match. No apps to install, no accounts, just the same Wi-Fi.
 
 ## Screenshots
 
