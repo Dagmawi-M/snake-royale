@@ -92,7 +92,7 @@
   }
   .prow:hover { border-color: var(--line); background: rgba(232,235,245,0.07); }
   @media (hover: none) { .kickBtn { opacity: 0.6; } }
-  .dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 8px currentColor; }
+  .prow .pv { width: 32px; height: 22px; flex-shrink: 0; filter: drop-shadow(0 0 5px currentColor); }
   .pname { flex: 1; font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pspecies { font-size: 11.5px; font-weight: 500; color: #9aa3bd; }
   .score { font-size: 16px; font-weight: 300; min-width: 18px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -242,6 +242,7 @@
   </aside>
 </div>
 
+<script src="/snakes.js"></script>
 <script>
 const stage = document.getElementById("stage");
 const canvas = document.getElementById("game");
@@ -507,29 +508,10 @@ const state = {
 };
 let usedColors = 0;
 
-// species picked on the phone controller is purely cosmetic — it just claims a color
-const SPECIES_COLORS = {
-  cobra: "#5ec8b0", python: "#8de85e", viper: "#e8836e", mamba: "#7a8ce8",
-  anaconda: "#e8c56e", rattlesnake: "#e85e8f", boa: "#a78bfa", taipan: "#6fb1e8",
-};
-const SPECIES_NAMES = {
-  cobra: "Cobra", python: "Python", viper: "Viper", mamba: "Black Mamba",
-  anaconda: "Anaconda", rattlesnake: "Rattlesnake", boa: "Boa", taipan: "Taipan",
-};
-// each species has a distinct body pattern + head features, so snakes differ in more than color
-const SPECIES_STYLE = {
-  cobra:       { pattern: "chevrons", hood: true },
-  python:      { pattern: "blotches" },
-  viper:       { pattern: "zigzag" },
-  mamba:       { pattern: "plain" },
-  anaconda:    { pattern: "rings" },
-  rattlesnake: { pattern: "diamonds", rattle: true },
-  boa:         { pattern: "bands" },
-  taipan:      { pattern: "speckle" },
-};
-const DEFAULT_PATTERNS = ["bands", "blotches", "diamonds", "chevrons", "rings", "zigzag", "speckle", "plain"];
-const styleFor = (speciesKey, idx) =>
-  SPECIES_STYLE[speciesKey] || { pattern: DEFAULT_PATTERNS[idx % DEFAULT_PATTERNS.length] };
+// species picked on the phone controller — the full visual identity (head sprite shape,
+// body pattern, color) lives in the shared SnakeArt module (/snakes.js), same file the phones use
+const SPECIES_COLORS = Object.fromEntries(SnakeArt.SPECIES.map(s => [s.key, s.color]));
+const SPECIES_NAMES = Object.fromEntries(SnakeArt.SPECIES.map(s => [s.key, s.name]));
 
 function makePlayer(id, name, speciesKey) {
   const idx = usedColors++;
@@ -539,8 +521,10 @@ function makePlayer(id, name, speciesKey) {
   if (!color || takenColors.has(color)) {
     color = idx < PLAYER_COLORS.length ? PLAYER_COLORS[idx] : `hsl(${(idx * 137.5) % 360}, 70%, 62%)`;
   }
+  const styleKey = SnakeArt.styleKeyFor(speciesKey, idx);
   return {
-    id, name, color, species: SPECIES_NAMES[speciesKey] || null, style: styleFor(speciesKey, idx),
+    id, name, color, species: SPECIES_NAMES[speciesKey] || null,
+    styleKey, styleIdx: idx, style: SnakeArt.STYLE[styleKey],
     score: 0, ready: false,
     x: 0, y: 0, dir: 0, inx: 0, iny: 0,
     trail: [],                    // points [x, y, gap] — gap points draw/kill nothing
@@ -585,7 +569,8 @@ function connect() {
         const color = SPECIES_COLORS[m.key];
         if (color && !takenColors.has(color)) p.color = color;
         p.species = SPECIES_NAMES[m.key] || null;
-        p.style = styleFor(m.key, 0);
+        p.styleKey = SnakeArt.styleKeyFor(m.key, p.styleIdx);
+        p.style = SnakeArt.STYLE[p.styleKey];
         sendTo(p.id, { t: "you", color: p.color, name: p.name });
         renderSide();
       }
@@ -693,13 +678,17 @@ function renderSide() {
       .map(p => {
         const [cls, txt] = chipFor(p);
         return `<div class="prow">
-          <div class="dot" style="background:${p.color};color:${p.color}" title="${p.species || ""}"></div>
+          <canvas class="pv" data-k="${p.styleKey}" data-c="${p.color}" width="64" height="44"
+                  style="color:${p.color}" title="${p.species || ""}"></canvas>
           <div class="pname">${p.name.replace(/[<>&]/g, "")}${p.species ? ` <span class="pspecies">· ${p.species}</span>` : ""}</div>
           <div class="chip ${cls}">${txt}</div>
           <div class="score" style="color:${p.color}">${p.score}</div>
           <button class="kickBtn" data-id="${p.id}" title="Remove ${p.name.replace(/[<>&"]/g, "")}">✕</button>
         </div>`;
       }).join("");
+    for (const cv of playersEl.querySelectorAll("canvas.pv")) {
+      SnakeArt.paintPreview(cv, cv.dataset.k, cv.dataset.c, { headOnly: true });
+    }
   }
 
   const ph = {
@@ -920,7 +909,7 @@ function confetti() {
 
 // ---------- snake movement ----------
 const POINT_GAP = 3;   // px between recorded trail points
-const trailW = () => Math.max(3.5, minDim * 0.0075);
+const trailW = () => Math.max(4, minDim * 0.0088);
 const headR = () => trailW() * 1.1;
 const speed = () => minDim * 0.16;
 const TURN = 3.7;      // rad/s toward the joystick direction
@@ -1548,16 +1537,20 @@ function drawTrails(now) {
       ctx.lineWidth = bw;
       ctx.globalAlpha = (lobby ? 0.5 : 0.5 + 0.45 * fade) * deadDim;
       trace(); ctx.stroke();
+      // dorsal highlight — a thin bright spine that fakes cylindrical volume
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = Math.max(1, bw * 0.22);
+      ctx.globalAlpha = (lobby ? 0.06 : 0.13 * fade) * deadDim;
+      trace(); ctx.stroke();
     }
 
-    // species markings — bold, high-contrast, sized to the full body width so each snake type
-    // is recognizable at a glance even from across the room
+    // species markings — chunky full-width blocks (shared with the phone previews via
+    // SnakeArt.markAt) so each snake type is recognizable from across the room
     const pattern = p.style?.pattern || "bands";
     if (pattern !== "plain" && tr.length > 6) {
-      const dark = "rgba(5,8,14,0.95)";
-      const light = "rgba(255,255,255,0.85)";
-      ctx.lineCap = "butt";
-      const step = Math.max(2, Math.round((tw * 2.2) / POINT_GAP));
+      const dark = SnakeArt.shade(p.color, -0.62);
+      const light = SnakeArt.shade(p.color, 0.7);
+      const step = Math.max(2, Math.round((tw * 3.2) / POINT_GAP));
       let k = 0;
       for (let i = step; i < tr.length - 1; i += step, k++) {
         if (tr[i][2] || tr[i - 1][2] || tr[i + 1][2]) continue;
@@ -1565,76 +1558,8 @@ function drawTrails(now) {
         const w = tw * (0.35 + 0.85 * fade);
         const dx = tr[i + 1][0] - tr[i - 1][0], dy = tr[i + 1][1] - tr[i - 1][1];
         const L = Math.hypot(dx, dy) || 1;
-        const tx = dx / L, ty = dy / L, nx = -ty, ny = tx;
-        const x = tr[i][0], y = tr[i][1];
-        ctx.globalAlpha = (lobby ? 0.45 : 0.85) * (0.35 + 0.65 * fade) * deadDim;
-        ctx.fillStyle = dark;
-        ctx.strokeStyle = dark;
-        if (pattern === "bands") {
-          // alternating thick dark / thin light bands, boa-style
-          const isLight = k % 3 === 2;
-          ctx.strokeStyle = isLight ? light : dark;
-          ctx.lineWidth = Math.max(1.5, w * (isLight ? 0.45 : 0.9));
-          ctx.beginPath();
-          ctx.moveTo(x - nx * w, y - ny * w);
-          ctx.lineTo(x + nx * w, y + ny * w);
-          ctx.stroke();
-        } else if (pattern === "rings") {
-          // anaconda: full-width dark ring with a light core
-          ctx.lineWidth = Math.max(1.5, w * 0.4);
-          for (const [o, c] of [[-0.5, dark], [0.5, dark], [0, light]]) {
-            ctx.strokeStyle = c;
-            ctx.beginPath();
-            ctx.moveTo(x + tx * w * o - nx * w, y + ty * w * o - ny * w);
-            ctx.lineTo(x + tx * w * o + nx * w, y + ty * w * o + ny * w);
-            ctx.stroke();
-          }
-        } else if (pattern === "diamonds") {
-          // rattlesnake: fat diamonds spanning the whole back
-          ctx.beginPath();
-          ctx.moveTo(x + tx * w * 1.1, y + ty * w * 1.1);
-          ctx.lineTo(x + nx * w * 0.8, y + ny * w * 0.8);
-          ctx.lineTo(x - tx * w * 1.1, y - ty * w * 1.1);
-          ctx.lineTo(x - nx * w * 0.8, y - ny * w * 0.8);
-          ctx.closePath();
-          ctx.fill();
-          ctx.fillStyle = light;
-          ctx.beginPath();
-          ctx.arc(x, y, Math.max(1, w * 0.2), 0, TAU);
-          ctx.fill();
-        } else if (pattern === "blotches") {
-          // python: big saddle blotches alternating sides
-          const side = k % 2 ? 0.35 : -0.35;
-          ctx.beginPath();
-          ctx.ellipse(x + nx * w * side, y + ny * w * side, w * 1.05, w * 0.65, Math.atan2(ty, tx), 0, TAU);
-          ctx.fill();
-        } else if (pattern === "chevrons") {
-          // cobra: bold V-marks pointing tailward
-          ctx.lineWidth = Math.max(1.5, w * 0.5);
-          ctx.beginPath();
-          ctx.moveTo(x + tx * w + nx * w * 0.95, y + ty * w + ny * w * 0.95);
-          ctx.lineTo(x - tx * w * 0.7, y - ty * w * 0.7);
-          ctx.lineTo(x + tx * w - nx * w * 0.95, y + ty * w - ny * w * 0.95);
-          ctx.stroke();
-        } else if (pattern === "zigzag") {
-          // viper: continuous lightning stripe swinging edge to edge
-          const s1 = k % 2 ? 1 : -1;
-          ctx.lineWidth = Math.max(1.5, w * 0.55);
-          ctx.beginPath();
-          ctx.moveTo(x - tx * w * 1.1 + nx * s1 * w * 0.75, y - ty * w * 1.1 + ny * s1 * w * 0.75);
-          ctx.lineTo(x + tx * w * 1.1 - nx * s1 * w * 0.75, y + ty * w * 1.1 - ny * s1 * w * 0.75);
-          ctx.stroke();
-        } else if (pattern === "speckle") {
-          // taipan: dense scatter of dark + light flecks
-          for (const [off, c] of [[0.55, dark], [-0.45, dark], [0.05, light]]) {
-            const j = Math.sin(i * 12.9898 + off * 78.233 + p.id) * 43758.5453;
-            const jit = (j - Math.floor(j)) - 0.5;
-            ctx.fillStyle = c;
-            ctx.beginPath();
-            ctx.arc(x + nx * (off + jit * 0.5) * w, y + ny * (off + jit * 0.5) * w, Math.max(1, w * 0.24), 0, TAU);
-            ctx.fill();
-          }
-        }
+        ctx.globalAlpha = (lobby ? 0.5 : 1) * (0.5 + 0.5 * fade) * deadDim;
+        SnakeArt.markAt(ctx, pattern, tr[i][0], tr[i][1], dx / L, dy / L, w, k, dark, light);
       }
       ctx.lineCap = "round";
     }
@@ -1766,62 +1691,28 @@ function drawHeads(now, t) {
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(p.dir);
-    const s = hr;                      // head scale unit
-    // cobra hood: a flared mantle behind the skull, breathing slightly
-    if (p.style?.hood) {
-      const flare = 1 + 0.07 * Math.sin(t * 2.6 + p.id);
-      ctx.beginPath();
-      ctx.ellipse(-s * 0.7, 0, s * 2.1, s * 2.7 * flare, 0, 0, TAU);
-      ctx.fillStyle = p.color;
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(-s * 0.7, 0, s * 1.25, s * 1.7 * flare, 0, 0, TAU);
-      ctx.fillStyle = "rgba(10,13,26,0.4)";
-      ctx.fill();
-    }
-    // skull: rounded wedge, wider than the body, tapering to the snout
-    ctx.beginPath();
-    ctx.moveTo(s * 2.6, 0);                                    // snout tip
-    ctx.quadraticCurveTo(s * 2.3, s * 1.1, s * 0.6, s * 1.35); // right jaw
-    ctx.quadraticCurveTo(-s * 1.4, s * 1.25, -s * 1.6, 0);     // right rear
-    ctx.quadraticCurveTo(-s * 1.4, -s * 1.25, s * 0.6, -s * 1.35);
-    ctx.quadraticCurveTo(s * 2.3, -s * 1.1, s * 2.6, 0);
-    ctx.closePath();
-    ctx.fillStyle = p.color;
-    ctx.fill();
-    // lighter top plate for depth
-    ctx.beginPath();
-    ctx.moveTo(s * 2.1, 0);
-    ctx.quadraticCurveTo(s * 1.6, s * 0.65, -s * 0.6, s * 0.7);
-    ctx.quadraticCurveTo(-s * 1.1, 0, -s * 0.6, -s * 0.7);
-    ctx.quadraticCurveTo(s * 1.6, -s * 0.65, s * 2.1, 0);
-    ctx.fillStyle = "rgba(255,255,255,0.28)";
-    ctx.fill();
-    // eyes: amber with slit pupils
-    for (const side of [-1, 1]) {
-      ctx.beginPath();
-      ctx.arc(s * 1.1, side * s * 0.72, s * 0.42, 0, TAU);
-      ctx.fillStyle = "#ffd76e";
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(s * 1.18, side * s * 0.72, s * 0.10, s * 0.30, 0, 0, TAU);
-      ctx.fillStyle = "#101420";
-      ctx.fill();
-    }
-    // forked tongue: flicks out rhythmically
+    // species head sprite from SnakeArt: distinct skull shape, brow, pupils, markings
+    // per snake type — pre-rendered and cached, so this is a single blit per head.
+    // u is the visual head unit; the collision radius stays hr, unchanged.
+    const u = hr * 1.55;
+    const spr = SnakeArt.headSprite(p.styleKey, p.color, u);
+    if (spr.hood) ctx.scale(1, 1 + 0.05 * Math.sin(t * 2.6 + p.id));   // cobra hood breathes
+    ctx.drawImage(spr.c, -spr.ax, -spr.ay, spr.w, spr.h);
+    // forked tongue: flicks out rhythmically from the snout tip
     const flickT = (t * 2.2 + p.id * 1.3) % 1;
     if (flickT < 0.3) {
-      const out = Math.sin(flickT / 0.3 * Math.PI) * s * 1.7;
-      const wig = Math.sin(t * 30) * s * 0.18;
+      const tip = spr.snout * u - u * 0.1;
+      const out = Math.sin(flickT / 0.3 * Math.PI) * u * 1.6;
+      const wig = Math.sin(t * 30) * u * 0.16;
       ctx.strokeStyle = "#e8556e";
-      ctx.lineWidth = Math.max(1.5, s * 0.16);
+      ctx.lineWidth = Math.max(1.5, u * 0.13);
       ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.moveTo(s * 2.5, 0);
-      ctx.lineTo(s * 2.5 + out * 0.7, wig);
-      ctx.lineTo(s * 2.5 + out, wig + s * 0.35);
-      ctx.moveTo(s * 2.5 + out * 0.7, wig);
-      ctx.lineTo(s * 2.5 + out, wig - s * 0.35);
+      ctx.moveTo(tip, 0);
+      ctx.lineTo(tip + out * 0.7, wig);
+      ctx.lineTo(tip + out, wig + u * 0.3);
+      ctx.moveTo(tip + out * 0.7, wig);
+      ctx.lineTo(tip + out, wig - u * 0.3);
       ctx.stroke();
     }
     ctx.restore();
@@ -1865,15 +1756,27 @@ function drawHeads(now, t) {
 
 function drawNames(now) {
   const hr = headR();
+  const fs = Math.round(minDim * 0.019);
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.font = `600 ${Math.round(minDim * 0.021)}px system-ui, sans-serif`;
+  ctx.font = `600 ${fs}px system-ui, sans-serif`;
   for (const p of state.players.values()) {
     if (!p.alive || p.queued) continue;
     const label = state.phase === "lobby" && p.ready ? `${p.name} ✓` : p.name;
-    ctx.fillStyle = "rgba(10,13,26,0.6)";
-    ctx.fillText(label, p.x + 1, p.y - hr * 3.4 + 1);
-    ctx.fillStyle = state.phase === "lobby" && p.ready ? p.color : "rgba(240,243,252,0.92)";
-    ctx.fillText(label, p.x, p.y - hr * 3.4);
+    const y = p.y - hr * 4.6;
+    const tw2 = ctx.measureText(label).width;
+    const padX = fs * 0.55, ph = fs * 1.5;
+    // name pill: dark glass capsule rimmed in the player's color
+    ctx.beginPath();
+    ctx.roundRect(p.x - tw2 / 2 - padX, y - ph / 2, tw2 + padX * 2, ph, ph / 2);
+    ctx.fillStyle = "rgba(8,11,20,0.55)";
+    ctx.fill();
+    ctx.strokeStyle = p.color;
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = state.phase === "lobby" && p.ready ? p.color : "rgba(240,243,252,0.95)";
+    ctx.fillText(label, p.x, y + 0.5);
   }
 }
 

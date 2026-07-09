@@ -56,7 +56,8 @@
     background: rgba(232,235,245,0.06); border: 2px solid rgba(232,235,245,0.13); border-radius: 22px;
     transition: border-color 0.12s, background 0.12s, transform 0.1s;
   }
-  .spBtn .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 6px var(--sc); }
+  .spBtn .spIco { width: 26px; height: 18px; flex-shrink: 0; filter: drop-shadow(0 0 4px var(--sc)); }
+  #joinPv, #ovPv { width: 280px; height: 75px; }
   .spBtn.active { border-color: var(--sc); background: color-mix(in srgb, var(--sc) 22%, transparent); }
   .spBtn:active { transform: scale(0.94); }
 
@@ -106,10 +107,12 @@
     border-bottom: 1px solid rgba(232,235,245,0.07);
   }
   #swatch {
-    width: 26px; height: 26px; border-radius: 50%; background: #5ec8b0; box-shadow: 0 0 12px currentColor;
-    border: 2px solid rgba(255,255,255,0.35); padding: 0; flex-shrink: 0;
-    transition: transform 0.1s;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(232,235,245,0.07); box-shadow: 0 0 12px currentColor;
+    border: 2px solid rgba(255,255,255,0.3); padding: 0; flex-shrink: 0;
+    transition: transform 0.1s; overflow: hidden;
   }
+  #swatch canvas { width: 100%; height: 100%; display: block; }
   #swatch:active { transform: scale(0.88); }
 
   /* ---- species overlay: change snake type anytime from the pad screen ---- */
@@ -213,6 +216,7 @@
 <div id="join">
   <h1>Snake Royale</h1>
   <p>Steer your light snake — don't touch any trail</p>
+  <canvas id="joinPv" width="560" height="150"></canvas>
   <input id="name" placeholder="Your name" maxlength="12" autocomplete="off">
   <div id="species"></div>
   <button id="joinBtn">Join game</button>
@@ -221,7 +225,7 @@
 <div id="pad">
   <div id="main">
     <div id="topbar">
-      <button id="swatch" type="button" title="Change snake type"></button>
+      <button id="swatch" type="button" title="Change snake type"><canvas id="swIco" width="68" height="68"></canvas></button>
       <div id="pname"></div>
       <div id="conn">connecting…</div>
     </div>
@@ -253,10 +257,12 @@
 
 <div id="speciesOverlay" class="hidden">
   <h2>Choose your snake</h2>
+  <canvas id="ovPv" width="560" height="150"></canvas>
   <div id="speciesPanel2"></div>
   <button id="speciesClose">Done</button>
 </div>
 
+<script src="/snakes.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -274,24 +280,29 @@ const ghosts = new Map(); // id -> recent head positions, for short trails in th
 
 nameEl.value = localStorage.getItem("snake-name") || "";
 
-// ---- species picker: purely cosmetic — sets your snake's in-game color ----
-const SPECIES = [
-  { key: "cobra",       name: "Cobra",       color: "#5ec8b0" },
-  { key: "python",      name: "Python",      color: "#8de85e" },
-  { key: "viper",       name: "Viper",       color: "#e8836e" },
-  { key: "mamba",       name: "Black Mamba", color: "#7a8ce8" },
-  { key: "anaconda",    name: "Anaconda",    color: "#e8c56e" },
-  { key: "rattlesnake", name: "Rattlesnake", color: "#e85e8f" },
-  { key: "boa",         name: "Boa",         color: "#a78bfa" },
-  { key: "taipan",      name: "Taipan",      color: "#6fb1e8" },
-];
+// ---- species picker: shared visual identity from SnakeArt (/snakes.js) ----
+// picking a type changes your head shape + body pattern + color, live-previewed here
+const SPECIES = SnakeArt.SPECIES;
 let mySpecies = localStorage.getItem("snake-species") || "";
 function speciesChipsHtml() {
   return SPECIES.map(s =>
     `<button type="button" class="spBtn${s.key === mySpecies ? " active" : ""}" data-key="${s.key}" style="--sc:${s.color}">
-      <span class="dot" style="background:${s.color}"></span>${s.name}
+      <canvas class="spIco" width="52" height="36" data-k="${s.key}" data-c="${s.color}"></canvas>${s.name}
     </button>`
   ).join("");
+}
+function paintChipIcons(root) {
+  for (const cv of root.querySelectorAll("canvas.spIco"))
+    SnakeArt.paintPreview(cv, cv.dataset.k, cv.dataset.c, { headOnly: true });
+}
+const joinPv = $("joinPv"), ovPv = $("ovPv"), swIco = $("swIco");
+function paintSnakePreviews() {
+  const sp = SPECIES.find(s => s.key === mySpecies);
+  const key = sp ? sp.key : "boa";
+  const color = joined ? myColor : (sp ? sp.color : "#9aa3bd");
+  SnakeArt.paintPreview(joinPv, key, color);
+  SnakeArt.paintPreview(ovPv, key, color);
+  SnakeArt.paintPreview(swIco, key, color, { headOnly: true });
 }
 function refreshSpeciesChips() {
   document.querySelectorAll(".spBtn").forEach(el => el.classList.toggle("active", el.dataset.key === mySpecies));
@@ -300,21 +311,27 @@ function pickSpecies(key) {
   mySpecies = mySpecies === key ? "" : key;
   localStorage.setItem("snake-species", mySpecies);
   refreshSpeciesChips();
+  paintSnakePreviews();
   if (joined) send({ t: "species", key: mySpecies });
 }
 const speciesEl = $("species");
 speciesEl.innerHTML = speciesChipsHtml();
+paintChipIcons(speciesEl);
 speciesEl.addEventListener("click", (e) => {
   const b = e.target.closest(".spBtn");
   if (b) pickSpecies(b.dataset.key);
 });
+paintSnakePreviews();
 
 // ---- in-game species overlay: change snake type anytime, mid-lobby or mid-match ----
 const speciesOverlay = $("speciesOverlay"), speciesPanel2 = $("speciesPanel2"), speciesClose = $("speciesClose");
 speciesPanel2.innerHTML = speciesChipsHtml();
+paintChipIcons(speciesPanel2);
 swatch.addEventListener("click", () => {
   if (!joined) return;
   speciesPanel2.innerHTML = speciesChipsHtml();
+  paintChipIcons(speciesPanel2);
+  paintSnakePreviews();
   speciesOverlay.classList.remove("hidden");
 });
 speciesPanel2.addEventListener("click", (e) => {
@@ -345,9 +362,9 @@ function connect() {
       drawMini(m);
     } else if (m.t === "you") {
       myColor = m.color;
-      swatch.style.background = m.color;
-      swatch.style.color = m.color;
+      swatch.style.color = m.color;   // drives the glow ring around the head icon
       pname.textContent = m.name;
+      paintSnakePreviews();
     } else if (m.t === "boost") {
       boostUntil = performance.now() + m.cd;
       boostCd = m.cd;
